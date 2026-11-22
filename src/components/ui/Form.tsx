@@ -60,14 +60,17 @@ export function Field({
   );
 }
 
-export function Checkbox({ label, className, ...rest }: InputHTMLAttributes<HTMLInputElement> & { label: ReactNode }) {
+export const Checkbox = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { label: ReactNode }>(function Checkbox(
+  { label, className, ...rest },
+  ref,
+) {
   return (
     <label className={cn('inline-flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200', className)}>
-      <input type="checkbox" className="h-4 w-4 rounded border-line text-accent focus:ring-accent/30" {...rest} />
+      <input ref={ref} type="checkbox" className="h-4 w-4 rounded border-line text-accent focus:ring-accent/30" {...rest} />
       {label}
     </label>
   );
-}
+});
 
 export function SearchInput({ value, onChange, placeholder, className }: { value: string; onChange: (v: string) => void; placeholder?: string; className?: string }) {
   return (

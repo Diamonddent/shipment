@@ -57,3 +57,23 @@ export function inRange(date: string | null | undefined, from?: string, to?: str
   if (to && d > to) return false;
   return true;
 }
+
+/** react-hook-form onInvalid handler: surface the first validation error so a save never fails silently. */
+export function invalidFormHandler(toast: { error: (title: string, err?: unknown) => void }) {
+  return (errors: Record<string, unknown>) => {
+    const walk = (o: unknown, path: string[] = []): { path: string; msg: string } | null => {
+      if (!o || typeof o !== 'object') return null;
+      const rec = o as Record<string, unknown>;
+      if (typeof rec.message === 'string' && rec.message) return { path: path.join('.'), msg: rec.message };
+      for (const [k, v] of Object.entries(rec)) {
+        if (k === 'ref') continue;
+        const r = walk(v, [...path, k]);
+        if (r) return r;
+      }
+      return null;
+    };
+    const first = walk(errors);
+    const label = first?.path.replace(/_/g, ' ') ?? 'form';
+    toast.error('Please check the form', first ? `${label}: ${first.msg}` : 'Some fields are invalid');
+  };
+}

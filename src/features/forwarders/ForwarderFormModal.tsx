@@ -7,7 +7,7 @@ import { Button, Checkbox, Field, Input, Modal, Textarea, useToast } from '@/com
 import { forwardersService } from '@/services/masterData';
 import { qk } from '@/hooks/queries';
 import { COUNTRIES } from '@/lib/constants';
-import { cleanPayload } from '@/lib/utils';
+import { cleanPayload, invalidFormHandler } from '@/lib/utils';
 import type { FreightForwarder } from '@/types/database';
 
 const schema = z.object({
@@ -64,11 +64,11 @@ export function ForwarderFormModal({ open, onClose, forwarder, onSaved }: { open
       footer={
         <>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={form.handleSubmit((v) => save.mutate(v))} loading={save.isPending}>Save</Button>
+          <Button onClick={form.handleSubmit((v) => save.mutate(v), invalidFormHandler(toast))} loading={save.isPending}>Save</Button>
         </>
       }
     >
-      <form className="grid gap-4 sm:grid-cols-2" onSubmit={form.handleSubmit((v) => save.mutate(v))}>
+      <form className="grid gap-4 sm:grid-cols-2" onSubmit={form.handleSubmit((v) => save.mutate(v), invalidFormHandler(toast))}>
         <Field label="Name" required error={e.name?.message} className="sm:col-span-2"><Input {...form.register('name')} invalid={!!e.name} /></Field>
         <Field label="Country"><Input list="dd-countries-ff" {...form.register('country')} /></Field>
         <Field label="Services" hint="e.g. Air, Sea, Courier, Clearance"><Input {...form.register('services')} /></Field>

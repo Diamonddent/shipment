@@ -14,7 +14,7 @@ import { googleDrive } from '@/services/googleDrive';
 import { ALLOWED_UPLOAD_EXT, DOC_TYPES, PAYMENT_METHODS } from '@/lib/constants';
 import { expensePayable, toSar } from '@/lib/calculations';
 import { fmtMoney } from '@/lib/format';
-import { cleanPayload, todayISO } from '@/lib/utils';
+import { cleanPayload, todayISO, invalidFormHandler } from '@/lib/utils';
 import { errorMessage, isDuplicateExpenseError } from '@/lib/errors';
 import type { DocType, ExpenseWithRefs, PaymentMethod } from '@/types/database';
 
@@ -213,7 +213,7 @@ export function ExpenseFormModal({
     },
   });
 
-  const submit = (forceOverride = false) => form.handleSubmit((v) => save.mutate({ v, forceOverride }))();
+  const submit = (forceOverride = false) => form.handleSubmit((v) => save.mutate({ v, forceOverride }), invalidFormHandler(toast))();
 
   return (
     <Modal

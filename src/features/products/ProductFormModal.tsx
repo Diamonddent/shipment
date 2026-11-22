@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Checkbox, Field, Input, Modal, Select, useToast } from '@/components/ui';
 import { productsService } from '@/services/masterData';
 import { qk, useCurrencies } from '@/hooks/queries';
-import { cleanPayload } from '@/lib/utils';
+import { cleanPayload, invalidFormHandler } from '@/lib/utils';
 import type { Product } from '@/types/database';
 
 const optNum = z.preprocess((v) => (v === '' || v === null || (typeof v === 'number' && Number.isNaN(v)) ? undefined : v), z.number().min(0).optional());
@@ -59,8 +59,8 @@ export function ProductFormModal({ open, onClose, product }: { open: boolean; on
   const r = form.register;
   return (
     <Modal open={open} onClose={onClose} size="lg" title={product ? 'Edit product' : 'New product'}
-      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={form.handleSubmit((v) => save.mutate(v))} loading={save.isPending}>Save</Button></>}>
-      <form className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" onSubmit={form.handleSubmit((v) => save.mutate(v))} noValidate>
+      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={form.handleSubmit((v) => save.mutate(v), invalidFormHandler(toast))} loading={save.isPending}>Save</Button></>}>
+      <form className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" onSubmit={form.handleSubmit((v) => save.mutate(v), invalidFormHandler(toast))} noValidate>
         <Field label="Item code" required error={e.item_code?.message}><Input {...r('item_code')} invalid={!!e.item_code} /></Field>
         <Field label="Description" required error={e.description?.message} className="sm:col-span-1 lg:col-span-2"><Input {...r('description')} invalid={!!e.description} /></Field>
         <Field label="Manufacturer"><Input {...r('manufacturer')} /></Field>

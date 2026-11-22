@@ -12,7 +12,7 @@ import { qk, useForwarders, useSuppliers, useUsers } from '@/hooks/queries';
 import { usePermissions } from '@/hooks/useAuth';
 import { shipmentsService, type ShipmentInput } from '@/services/shipments';
 import { COUNTRIES, SHIPMENT_STATUSES, SHIPPING_METHODS } from '@/lib/constants';
-import { cleanPayload } from '@/lib/utils';
+import { cleanPayload, invalidFormHandler } from '@/lib/utils';
 import type { ShipmentWithRefs } from '@/types/database';
 
 const optDate = z.string().optional();
@@ -131,7 +131,7 @@ export function ShipmentForm({
 
   return (
     <>
-    <form onSubmit={form.handleSubmit((v) => save.mutate(v))} noValidate className="space-y-6">
+    <form onSubmit={form.handleSubmit((v) => save.mutate(v), invalidFormHandler(toast))} noValidate className="space-y-6">
       <section>
         <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Shipment & supplier</h4>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -10,7 +10,7 @@ import { shipmentProductsService, type ShipmentProductInput } from '@/services/s
 import { productsService } from '@/services/masterData';
 import { productInvoiceValue, productInvoiceValueSar } from '@/lib/calculations';
 import { fmtAmount, fmtMoney } from '@/lib/format';
-import { cleanPayload } from '@/lib/utils';
+import { cleanPayload, invalidFormHandler } from '@/lib/utils';
 import type { Shipment, ShipmentProduct } from '@/types/database';
 
 const optNum = z.preprocess((v) => (v === '' || v === null || (typeof v === 'number' && Number.isNaN(v)) ? undefined : v), z.number().min(0, 'Cannot be negative').optional());
@@ -157,11 +157,11 @@ export function ShipmentProductFormModal({
       footer={
         <>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={form.handleSubmit((v) => save.mutate(v))} loading={save.isPending}>{line ? 'Save' : 'Add product'}</Button>
+          <Button onClick={form.handleSubmit((v) => save.mutate(v), invalidFormHandler(toast))} loading={save.isPending}>{line ? 'Save' : 'Add product'}</Button>
         </>
       }
     >
-      <form className="space-y-5" onSubmit={form.handleSubmit((v) => save.mutate(v))} noValidate>
+      <form className="space-y-5" onSubmit={form.handleSubmit((v) => save.mutate(v), invalidFormHandler(toast))} noValidate>
         <Field label="Pick from product catalogue" hint="Optional — fills the fields below">
           <Select value={productId ?? ''} onChange={(ev) => pickProduct(ev.target.value)}>
             <option value="">— New / manual entry —</option>

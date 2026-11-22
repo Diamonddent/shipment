@@ -7,7 +7,7 @@ import { Button, Checkbox, Field, Input, Modal, Select, Textarea, useToast } fro
 import { suppliersService } from '@/services/masterData';
 import { qk, useCurrencies } from '@/hooks/queries';
 import { COUNTRIES } from '@/lib/constants';
-import { cleanPayload } from '@/lib/utils';
+import { cleanPayload, invalidFormHandler } from '@/lib/utils';
 import type { Supplier } from '@/types/database';
 
 const schema = z.object({
@@ -72,11 +72,11 @@ export function SupplierFormModal({ open, onClose, supplier, onSaved }: { open: 
       footer={
         <>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={form.handleSubmit((v) => save.mutate(v))} loading={save.isPending}>Save supplier</Button>
+          <Button onClick={form.handleSubmit((v) => save.mutate(v), invalidFormHandler(toast))} loading={save.isPending}>Save supplier</Button>
         </>
       }
     >
-      <form className="grid gap-4 sm:grid-cols-2" onSubmit={form.handleSubmit((v) => save.mutate(v))}>
+      <form className="grid gap-4 sm:grid-cols-2" onSubmit={form.handleSubmit((v) => save.mutate(v), invalidFormHandler(toast))}>
         <Field label="Supplier name" required error={e.name?.message} className="sm:col-span-2"><Input {...form.register('name')} invalid={!!e.name} /></Field>
         <Field label="Country">
           <Input list="dd-countries" {...form.register('country')} />
