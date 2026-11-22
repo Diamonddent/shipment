@@ -37,7 +37,6 @@ jobs:
       - name: Build
         # Public Supabase URL + anon key live in .env.production (safe to publish; RLS protects data)
         env:
-          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           # Repository variable overrides the default /shipment/ (e.g. "/" for a custom domain)
           VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH || '/shipment/' }}
         run: npm run build
