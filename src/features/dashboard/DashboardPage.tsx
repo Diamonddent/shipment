@@ -4,7 +4,7 @@ import {
   Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import {
-  AlertTriangle, CheckCircle2, Clock, Coins, Landmark, Package, Percent, Plane, Plus, Receipt, Scale, Ship, Wallet,
+  AlertTriangle, CheckCircle2, Clock, Coins, Landmark, Package, Percent, Plane, Plus, Receipt, Ship, Wallet,
 } from 'lucide-react';
 import { Button, Card, CardHeader, Checkbox, EmptyState, ErrorState, Input, KpiCard, PageHeader, Select, Skeleton } from '@/components/ui';
 import { toCalcExpense, useAllExpenses, useSettings, useShipments, useSuppliers } from '@/hooks/queries';
@@ -55,34 +55,33 @@ export default function DashboardPage() {
 
   const included = filtered.filter((s) => summary.perShipment.has(s.id));
 
-  const distribution = COST_GROUPS.map((g) => ({ name: COST_GROUP_LABELS[g], value: summary.byGroup[g] })).filter((d) => d.value > 0);
+  const distribution = COST_GROUPS.filter((g) => g !== 'product_invoice').map((g) => ({ name: COST_GROUP_LABELS[g], value: summary.byGroup[g] })).filter((d) => d.value > 0);
   const monthly = useMemo(() => {
-    const m = new Map<string, { month: string; invoice: number; additional: number; landed: number }>();
+    const m = new Map<string, { month: string; invoice: number; additional: number }>();
     for (const s of included) {
       const a = summary.perShipment.get(s.id)!;
       const k = monthKey(s.supplier_invoice_date ?? s.created_at);
-      const cur = m.get(k) ?? { month: k, invoice: 0, additional: 0, landed: 0 };
+      const cur = m.get(k) ?? { month: k, invoice: 0, additional: 0 };
       cur.invoice = sumMoney([cur.invoice, a.productInvoiceValue]);
       cur.additional = sumMoney([cur.additional, a.additionalExpenseTotal]);
-      cur.landed = sumMoney([cur.landed, a.totalLandedCost]);
       m.set(k, cur);
     }
-    return [...m.values()].sort((x, y) => x.month.localeCompare(y.month)).map((r) => ({ ...r, label: monthLabel(r.month) }));
+    return [...m.values()].sort((x, y) => x.month.localeCompare(y.month)).map((r) => ({ ...r, label: monthLabel(r.month), pct: r.invoice > 0 ? Math.round((r.additional / r.invoice) * 10000) / 100 : null }));
   }, [included, summary]);
   const comparison = included
     .map((s) => {
       const a = summary.perShipment.get(s.id)!;
-      return { name: s.shipment_code.replace(/^.*?(\d{4}-\d{4})$/, '$1'), full: s.shipment_code, invoice: a.productInvoiceValue, additional: a.additionalExpenseTotal, total: a.totalLandedCost };
+      return { name: s.shipment_code.replace(/^.*?(\d{4}-\d{4})$/, '$1'), full: s.shipment_code, invoice: a.productInvoiceValue, additional: a.additionalExpenseTotal, pct: a.additionalExpensePercentage };
     })
-    .sort((a, b) => b.total - a.total)
+    .sort((a, b) => b.additional - a.additional)
     .slice(0, 12);
   const byCountry = useMemo(() => {
-    const m = new Map<string, { country: string; shipments: number; landed: number }>();
+    const m = new Map<string, { country: string; shipments: number; expenses: number }>();
     for (const s of included) {
       const c = s.supplier?.country || s.country_of_origin || 'Unknown';
-      const cur = m.get(c) ?? { country: c, shipments: 0, landed: 0 };
+      const cur = m.get(c) ?? { country: c, shipments: 0, expenses: 0 };
       cur.shipments += 1;
-      cur.landed = sumMoney([cur.landed, summary.perShipment.get(s.id)!.totalLandedCost]);
+      cur.expenses = sumMoney([cur.expenses, summary.perShipment.get(s.id)!.additionalExpenseTotal]);
       m.set(c, cur);
     }
     return [...m.values()].sort((a, b) => b.shipments - a.shipments);
@@ -140,7 +139,6 @@ export default function DashboardPage() {
             <KpiCard label="Customs duty" value={fmtMoney(summary.customsDuty)} icon={<Landmark className="h-5 w-5" />} tone="slate" />
             <KpiCard label="Total VAT" value={fmtMoney(summary.vat)} icon={<Receipt className="h-5 w-5" />} tone="slate" hint="Import VAT (recoverable)" />
             <KpiCard label="Total expenses" value={fmtMoney(summary.additionalExpenses)} icon={<Coins className="h-5 w-5" />} tone="amber" />
-            <KpiCard label="Total landed cost" value={fmtMoney(summary.totalLandedCost)} icon={<Scale className="h-5 w-5" />} />
             <KpiCard label="Expenses % of supplier invoice" value={fmtPct(summary.weightedAdditionalPct)} icon={<Percent className="h-5 w-5" />} tone="violet" hint={`Average per shipment: ${fmtPct(summary.averageAdditionalPct)}`} />
             <KpiCard label="Pending shipments" value={summary.pendingShipments} icon={<Clock className="h-5 w-5" />} tone="amber" />
             <KpiCard label="Shipments completed" value={summary.completedShipments} icon={<CheckCircle2 className="h-5 w-5" />} tone="green" />
@@ -149,7 +147,7 @@ export default function DashboardPage() {
 
           <div className="mt-6 grid gap-6 xl:grid-cols-2">
             <Card>
-              <CardHeader title="Expense distribution" subtitle="Share of total landed cost" />
+              <CardHeader title="Expense distribution" subtitle="Share of total expenses (supplier invoice excluded)" />
               <div className="h-72 p-4">
                 {distribution.length === 0 ? <EmptyState title="No expenses in this selection" /> : (
                   <ResponsiveContainer>
@@ -157,35 +155,36 @@ export default function DashboardPage() {
                       <Pie isAnimationActive={false} data={distribution} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={1}>
                         {distribution.map((d, i) => <Cell key={d.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                       </Pie>
-                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`${fmtMoney(v)} · ${fmtPct((v / summary.totalLandedCost) * 100)}`, n]} />
+                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`${fmtMoney(v)} · ${fmtPct((v / summary.additionalExpenses) * 100)}`, n]} />
                       <Legend verticalAlign="bottom" align="center" layout="horizontal" iconType="circle" wrapperStyle={{ fontSize: 11 }}
-                        formatter={(value: string, entry) => `${value} ${fmtPct(((entry.payload as unknown as { value: number }).value / summary.totalLandedCost) * 100, 1)}`} />
+                        formatter={(value: string, entry) => `${value} ${fmtPct(((entry.payload as unknown as { value: number }).value / summary.additionalExpenses) * 100, 1)}`} />
                     </PieChart>
                   </ResponsiveContainer>
                 )}
               </div>
             </Card>
             <Card>
-              <CardHeader title="Monthly shipment expenses" subtitle="Supplier invoice vs expenses, with landed cost trend (by supplier invoice month)" />
+              <CardHeader title="Monthly shipment expenses" subtitle="Supplier invoice vs expenses, with expenses % of invoice (by supplier invoice month)" />
               <div className="h-72 p-4">
                 {monthly.length === 0 ? <EmptyState title="No data" /> : (
                   <ResponsiveContainer>
                     <ComposedChart data={monthly}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#E5E9F0" vertical={false} />
                       <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                      <YAxis tickFormatter={fmtCompact} tick={{ fontSize: 11 }} width={50} />
-                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => fmtMoney(v)} />
+                      <YAxis yAxisId="l" tickFormatter={fmtCompact} tick={{ fontSize: 11 }} width={50} />
+                      <YAxis yAxisId="r" orientation="right" tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 11 }} width={40} />
+                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => (n === 'Expenses % of invoice' ? fmtPct(v) : fmtMoney(v))} />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar isAnimationActive={false} dataKey="invoice" name="Supplier invoice" stackId="a" fill="#1E3A8A" radius={[0, 0, 0, 0]} />
-                      <Bar isAnimationActive={false} dataKey="additional" name="Expenses" stackId="a" fill="#F59E0B" radius={[4, 4, 0, 0]} />
-                      <Line isAnimationActive={false} dataKey="landed" name="Landed cost" stroke="#2563EB" strokeWidth={2} dot={{ r: 3 }} />
+                      <Bar yAxisId="l" isAnimationActive={false} dataKey="invoice" name="Supplier invoice" fill="#1E3A8A" radius={[4, 4, 0, 0]} />
+                      <Bar yAxisId="l" isAnimationActive={false} dataKey="additional" name="Expenses" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+                      <Line yAxisId="r" isAnimationActive={false} dataKey="pct" name="Expenses % of invoice" stroke="#2563EB" strokeWidth={2} dot={{ r: 3 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 )}
               </div>
             </Card>
             <Card>
-              <CardHeader title="Shipment cost comparison" subtitle="Top shipments by landed cost" />
+              <CardHeader title="Shipment cost comparison" subtitle="Top shipments by total expenses" />
               <div className="h-72 p-4">
                 {comparison.length === 0 ? <EmptyState title="No data" /> : (
                   <ResponsiveContainer>
@@ -193,17 +192,17 @@ export default function DashboardPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#E5E9F0" vertical={false} />
                       <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                       <YAxis tickFormatter={fmtCompact} tick={{ fontSize: 11 }} width={50} />
-                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => fmtMoney(v)} labelFormatter={(_, p) => (p?.[0]?.payload as { full?: string })?.full ?? ''} />
+                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => fmtMoney(v)} labelFormatter={(_, p) => { const x = p?.[0]?.payload as { full?: string; pct?: number | null } | undefined; return x ? `${x.full} · expenses ${fmtPct(x.pct ?? null)} of invoice` : ''; }} />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar isAnimationActive={false} dataKey="invoice" name="Supplier invoice" stackId="a" fill="#1E3A8A" cursor="pointer" />
-                      <Bar isAnimationActive={false} dataKey="additional" name="Expenses" stackId="a" fill="#0EA5E9" radius={[4, 4, 0, 0]} cursor="pointer" />
+                      <Bar isAnimationActive={false} dataKey="invoice" name="Supplier invoice" fill="#1E3A8A" radius={[4, 4, 0, 0]} cursor="pointer" />
+                      <Bar isAnimationActive={false} dataKey="additional" name="Expenses" fill="#0EA5E9" radius={[4, 4, 0, 0]} cursor="pointer" />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
               </div>
             </Card>
             <Card>
-              <CardHeader title="Country of origin" subtitle="Shipment distribution by supplier country (hover for landed cost)" />
+              <CardHeader title="Country of origin" subtitle="Shipment distribution by supplier country (hover for total expenses)" />
               <div className="h-72 p-4">
                 {byCountry.length === 0 ? <EmptyState title="No data" /> : (
                   <ResponsiveContainer>
@@ -213,7 +212,7 @@ export default function DashboardPage() {
                       <YAxis type="category" dataKey="country" tick={{ fontSize: 11 }} width={110} />
                       <Tooltip
                         contentStyle={tooltipStyle}
-                        formatter={(v: number, _n: string, item) => [`${v} shipment(s) · ${fmtMoney((item.payload as { landed: number }).landed)}`, 'Shipments · landed cost']}
+                        formatter={(v: number, _n: string, item) => [`${v} shipment(s) · ${fmtMoney((item.payload as { expenses: number }).expenses)}`, 'Shipments · total expenses']}
                       />
                       <Bar isAnimationActive={false} dataKey="shipments" name="Shipments" radius={[0, 6, 6, 0]} barSize={22}>
                         {byCountry.map((c, i) => <Cell key={c.country} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}

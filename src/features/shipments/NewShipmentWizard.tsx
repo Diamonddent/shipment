@@ -87,6 +87,7 @@ function WizardSteps({ id, step, go }: { id: string; step: number; go: (n: numbe
       await generateCostStatement({
         shipment: s,
         expenses,
+        documents: docs,
         categories: b.categories.data ?? [],
         includeLineVat: b.settings.includeLineVat,
         companyName: b.settings.companyName,
@@ -155,7 +156,7 @@ function WizardSteps({ id, step, go }: { id: string; step: number; go: (n: numbe
                   <ul className="list-disc pl-5">{b.warnings.map((w) => <li key={w.code}>{w.message}</li>)}</ul>
                 </Alert>
               )}
-              <CostAnalysisPanel analysis={b.analysis} showExclVat={b.settings.showLandedCostExclVat} />
+              <CostAnalysisPanel analysis={b.analysis} />
               {canEdit && (
                 s.workflow_step >= 6 ? (
                   <Alert tone="green">Cost distribution reviewed.</Alert>
@@ -170,9 +171,9 @@ function WizardSteps({ id, step, go }: { id: string; step: number; go: (n: numbe
           {step === 6 && (
             <div className="space-y-4 p-5">
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-lg bg-slate-50 p-4 dark:bg-navy-800"><p className="text-xs text-slate-500">Total landed cost</p><p className="text-lg font-semibold">{fmtMoney(b.analysis.totalLandedCost)}</p></div>
+                <div className="rounded-lg bg-slate-50 p-4 dark:bg-navy-800"><p className="text-xs text-slate-500">Total expenses</p><p className="text-lg font-semibold">{fmtMoney(b.analysis.additionalExpenseTotal)}</p></div>
                 <div className="rounded-lg bg-slate-50 p-4 dark:bg-navy-800"><p className="text-xs text-slate-500">Expenses % of supplier invoice</p><p className="text-lg font-semibold">{fmtPct(b.analysis.additionalExpensePercentage)}</p></div>
-                <div className="rounded-lg bg-slate-50 p-4 dark:bg-navy-800"><p className="text-xs text-slate-500">Unpaid expenses</p><p className="text-lg font-semibold">{expenses.filter((e) => e.payment_status !== 'paid').length}</p></div>
+                <div className="rounded-lg bg-slate-50 p-4 dark:bg-navy-800"><p className="text-xs text-slate-500">Unpaid expenses</p><p className="text-lg font-semibold">{expenses.filter((e) => e.payment_status === 'unpaid' || e.payment_status === 'partially_paid').length}</p></div>
               </div>
               {b.warnings.length > 0 ? (
                 <Alert tone="amber" title={`${b.warnings.length} open warning(s)`}>
@@ -196,7 +197,7 @@ function WizardSteps({ id, step, go }: { id: string; step: number; go: (n: numbe
           {step === 7 && (
             <div className="space-y-4 p-5">
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                The cost statement contains the shipment details, each expense as a % of the supplier invoice, the total expense %, every expense line and payment status, with sign-off lines.
+                The cost statement contains the shipment details, each expense as a % of the supplier invoice, the total expense %, every expense line with its payment status and attachment, with sign-off lines.
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button icon={<FileDown className="h-4 w-4" />} onClick={() => void exportPdf()} loading={exporting}>Export cost statement (PDF)</Button>

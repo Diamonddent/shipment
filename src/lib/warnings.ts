@@ -42,7 +42,7 @@ export function shipmentWarnings(
   if (AFTER_CLEARANCE.includes(s.status) && !active.some((e) => e.category?.cost_group === 'import_vat'))
     w.push({ level: 'warning', code: 'no_vat', message: 'No import VAT entered.' });
   if (s.status === 'completed') {
-    const unpaid = active.filter((e) => e.payment_status !== 'paid');
+    const unpaid = active.filter((e) => (e.payment_status === 'unpaid' || e.payment_status === 'partially_paid'));
     if (unpaid.length) w.push({ level: 'warning', code: 'completed_unpaid', message: `Completed shipment still has ${unpaid.length} unpaid expense(s).` });
   }
   const pending = active.filter((e) => e.review_status === 'rejected');

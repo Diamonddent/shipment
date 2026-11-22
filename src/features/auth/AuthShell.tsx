@@ -25,7 +25,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
               Track every import cost — supplier invoices, freight, customs duty, VAT and clearance — and see every expense as a % of the supplier invoice.
             </p>
             <div className="mt-8 grid max-w-md grid-cols-3 gap-3 text-center">
-              {['Expense % of invoice', 'Landed cost', 'Audit trail'].map((t) => (
+              {['Expense % of invoice', 'Drive attachments', 'Audit trail'].map((t) => (
                 <div key={t} className="rounded-xl bg-white/5 px-3 py-4 text-xs text-slate-200 ring-1 ring-white/10">
                   {t}
                 </div>

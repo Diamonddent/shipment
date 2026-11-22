@@ -9,7 +9,7 @@ export const CHART_COLORS = ['#1E3A8A', '#2563EB', '#0EA5E9', '#14B8A6', '#F59E0
  * Key metric: each expense and the total expenses as a % of the supplier invoice value.
  * % of supplier invoice = expense ÷ supplier invoice × 100.
  */
-export function CostAnalysisPanel({ analysis, showExclVat = true }: { analysis: ShipmentCostAnalysis; showExclVat?: boolean }) {
+export function CostAnalysisPanel({ analysis }: { analysis: ShipmentCostAnalysis }) {
   if (analysis.expenseCount === 0)
     return (
       <Card>
@@ -22,7 +22,6 @@ export function CostAnalysisPanel({ analysis, showExclVat = true }: { analysis: 
     { label: 'Supplier invoice value', value: fmtMoney(analysis.productInvoiceValue) },
     { label: 'Total expenses', value: fmtMoney(analysis.additionalExpenseTotal), hint: 'All costs except the supplier invoice' },
     { label: 'Expenses % of supplier invoice', value: fmtPct(analysis.additionalExpensePercentage), hint: 'Total expenses ÷ supplier invoice × 100', strong: true },
-    { label: 'Total landed cost', value: fmtMoney(analysis.totalLandedCost), hint: 'Supplier invoice + expenses' },
   ];
   return (
     <div className="grid gap-5 2xl:grid-cols-5">
@@ -69,24 +68,17 @@ export function CostAnalysisPanel({ analysis, showExclVat = true }: { analysis: 
                 <td className="px-5 py-3 text-right text-accent">{fmtPct(analysis.additionalExpensePercentage)}</td>
                 <td className="hidden sm:table-cell" />
               </tr>
-              <tr className="bg-slate-50 text-slate-600 dark:bg-navy-800/60 dark:text-slate-300">
-                <td className="px-5 py-2.5">Total landed cost</td>
-                <td className="px-5 py-2.5 text-right">{fmtAmount(analysis.totalLandedCost)}</td>
-                <td className="px-5 py-2.5 text-right">{noInvoice ? '—' : fmtPct(100 + (analysis.additionalExpensePercentage ?? 0))}</td>
-                <td className="hidden sm:table-cell" />
-              </tr>
             </tfoot>
           </table>
         </div>
         <div className="border-t border-line px-5 py-3 text-xs text-slate-500 dark:border-navy-700">
-          {showExclVat && <>Landed cost excl. recoverable VAT: <b className="text-slate-700 dark:text-slate-200">{fmtMoney(analysis.landedCostExclRecoverableVat)}</b> · </>}
           VAT on service invoices: <b className="text-slate-700 dark:text-slate-200">{fmtMoney(analysis.lineVat)}</b> {analysis.lineVatIncluded ? '(included above)' : '(reported separately)'}
         </div>
       </Card>
       <div className="grid gap-5 lg:grid-cols-2 2xl:col-span-2 2xl:grid-cols-1">
         <div className="grid grid-cols-2 gap-3">
           {metrics.map((m) => (
-            <Card key={m.label} className={m.strong ? 'border-accent/40 p-4' : 'p-4'}>
+            <Card key={m.label} className={m.strong ? 'col-span-2 border-accent/40 p-4' : 'p-4'}>
               <p className="text-xs text-slate-500">{m.label}</p>
               <p className={`mt-1 text-lg font-semibold tabular-nums ${m.strong ? 'text-accent' : 'text-slate-900 dark:text-white'}`}>{m.value}</p>
               {m.hint && <p className="mt-0.5 text-[11px] text-slate-400">{m.hint}</p>}

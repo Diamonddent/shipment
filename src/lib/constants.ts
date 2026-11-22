@@ -28,7 +28,7 @@ export const PAYMENT_STATUSES: { value: PaymentStatus; label: string }[] = [
   { value: 'partially_paid', label: 'Partially Paid' },
   { value: 'paid', label: 'Paid' },
 ];
-export const PAYMENT_STATUS_LABEL = Object.fromEntries(PAYMENT_STATUSES.map((s) => [s.value, s.label])) as Record<PaymentStatus, string>;
+export const PAYMENT_STATUS_LABEL = { ...Object.fromEntries(PAYMENT_STATUSES.map((s) => [s.value, s.label])), not_applicable: '—' } as Record<PaymentStatus, string>;
 
 export const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: 'bank_transfer', label: 'Bank Transfer' },

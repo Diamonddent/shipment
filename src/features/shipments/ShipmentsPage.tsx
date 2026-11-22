@@ -100,7 +100,7 @@ export default function ShipmentsPage() {
     { key: 'country', header: 'Origin', hideBelow: 'md', sortValue: (s) => s.country_of_origin ?? '', cell: (s) => <div><p>{s.country_of_origin ?? '—'}</p><p className="text-xs text-slate-500">{s.shipping_method ? SHIPPING_METHOD_LABEL[s.shipping_method] : ''}</p></div> },
     { key: 'date', header: 'Invoice date', hideBelow: 'lg', sortValue: (s) => s.supplier_invoice_date ?? '', cell: (s) => <span className="whitespace-nowrap">{fmtDate(s.supplier_invoice_date)}</span> },
     { key: 'eta', header: 'Arrival', hideBelow: 'lg', sortValue: (s) => s.actual_arrival_date ?? s.expected_arrival_date ?? '', cell: (s) => <div><p className="whitespace-nowrap">{fmtDate(s.actual_arrival_date ?? s.expected_arrival_date)}</p><p className="text-xs text-slate-500">{s.actual_arrival_date ? 'actual' : s.expected_arrival_date ? 'expected' : ''}</p></div> },
-    { key: 'landed', header: 'Landed cost SAR', align: 'right', sortValue: (s) => analyses.get(s.id)?.totalLandedCost ?? 0, cell: (s) => <span className="font-semibold">{fmtAmount(analyses.get(s.id)?.totalLandedCost ?? 0)}</span> },
+    { key: 'expenses', header: 'Total expenses SAR', align: 'right', sortValue: (s) => analyses.get(s.id)?.additionalExpenseTotal ?? 0, cell: (s) => <span className="font-semibold">{fmtAmount(analyses.get(s.id)?.additionalExpenseTotal ?? 0)}</span> },
     { key: 'pct', header: 'Exp. % of invoice', align: 'right', hideBelow: 'md', sortValue: (s) => analyses.get(s.id)?.additionalExpensePercentage ?? -1, cell: (s) => fmtPct(analyses.get(s.id)?.additionalExpensePercentage) },
     { key: 'status', header: 'Status', sortValue: (s) => s.status, cell: (s) => <ShipmentStatusPill status={s.status} /> },
     {
@@ -127,14 +127,14 @@ export default function ShipmentsPage() {
       { header: 'Shipment ID', key: 'code' }, { header: 'PO', key: 'po' }, { header: 'Reference', key: 'ref' }, { header: 'Supplier', key: 'supplier', width: 28 },
       { header: 'Supplier Invoice', key: 'inv' }, { header: 'Invoice Date', key: 'invDate', format: 'date' }, { header: 'Origin', key: 'country' }, { header: 'Method', key: 'method' },
       { header: 'Forwarder', key: 'ff', width: 24 }, { header: 'AWB/BL', key: 'awb' }, { header: 'Currency', key: 'cur' }, { header: 'Rate', key: 'rate', format: 'rate' },
-      { header: 'Status', key: 'status' }, { header: 'Supplier Invoice SAR', key: 'pi', format: 'money' }, { header: 'Landed Cost SAR', key: 'landed', format: 'money' }, { header: 'Expenses % of Invoice', key: 'pct', format: 'pct' },
+      { header: 'Status', key: 'status' }, { header: 'Supplier Invoice SAR', key: 'pi', format: 'money' }, { header: 'Total Expenses SAR', key: 'expenses', format: 'money' }, { header: 'Expenses % of Invoice', key: 'pct', format: 'pct' },
     ],
     rows: filtered.map((s) => {
       const a = analyses.get(s.id);
       return {
         code: s.shipment_code, po: s.po_number ?? '', ref: s.reference_no ?? '', supplier: s.supplier?.name ?? '', inv: s.supplier_invoice_no ?? '', invDate: s.supplier_invoice_date,
         country: s.country_of_origin ?? '', method: s.shipping_method ? SHIPPING_METHOD_LABEL[s.shipping_method] : '', ff: s.forwarder?.name ?? '', awb: s.awb_bl_no ?? '',
-        cur: s.currency_code, rate: Number(s.exchange_rate), status: SHIPMENT_STATUS_LABEL[s.status], pi: a?.productInvoiceValue ?? 0, landed: a?.totalLandedCost ?? 0, pct: a?.additionalExpensePercentage ?? '',
+        cur: s.currency_code, rate: Number(s.exchange_rate), status: SHIPMENT_STATUS_LABEL[s.status], pi: a?.productInvoiceValue ?? 0, expenses: a?.additionalExpenseTotal ?? 0, pct: a?.additionalExpensePercentage ?? '',
       };
     }),
   });
@@ -144,7 +144,7 @@ export default function ShipmentsPage() {
     <div>
       <PageHeader
         title="Shipment Register"
-        subtitle="All import shipments with their landed cost in SAR"
+        subtitle="All import shipments with total expenses and % of supplier invoice"
         actions={
           <>
             <Dropdown

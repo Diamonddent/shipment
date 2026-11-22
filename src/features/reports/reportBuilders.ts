@@ -76,7 +76,6 @@ interface Agg {
   shipments: number;
   invoice: number;
   groups: Record<string, number>;
-  landed: number;
   additional: number;
 }
 function aggregate(ctx: ReportContext, keyOf: (s: ShipmentWithRefs) => string): Map<string, Agg> {
@@ -84,10 +83,9 @@ function aggregate(ctx: ReportContext, keyOf: (s: ShipmentWithRefs) => string): 
   for (const s of ctx.shipments) {
     const a = ctx.analyses.get(s.id)!;
     const k = keyOf(s);
-    const cur = m.get(k) ?? { shipments: 0, invoice: 0, groups: {}, landed: 0, additional: 0 };
+    const cur = m.get(k) ?? { shipments: 0, invoice: 0, groups: {}, additional: 0 };
     cur.shipments += 1;
     cur.invoice = sumMoney([cur.invoice, a.productInvoiceValue]);
-    cur.landed = sumMoney([cur.landed, a.totalLandedCost]);
     cur.additional = sumMoney([cur.additional, a.additionalExpenseTotal]);
     for (const g of COST_GROUPS) cur.groups[g] = sumMoney([cur.groups[g] ?? 0, a.byGroup[g]]);
     m.set(k, cur);
@@ -104,7 +102,7 @@ export const REPORTS: ReportDef[] = [
   {
     id: 'shipment-summary',
     title: 'Shipment Summary Report',
-    description: 'One line per shipment: supplier, route, status, supplier invoice value, expenses, expense % of invoice, landed cost and outstanding payments.',
+    description: 'One line per shipment: supplier, route, status, supplier invoice value, expenses, total expenses, expense % of invoice and outstanding payments.',
     orientation: 'landscape',
     build: (ctx) => {
       const rows = ctx.shipments.map((s) => {
@@ -113,7 +111,7 @@ export const REPORTS: ReportDef[] = [
         return {
           code: s.shipment_code, po: s.po_number ?? '', supplier: s.supplier?.name ?? '', country: s.country_of_origin ?? '',
           method: s.shipping_method ? SHIPPING_METHOD_LABEL[s.shipping_method] : '', status: SHIPMENT_STATUS_LABEL[s.status], date: s.supplier_invoice_date,
-          invoice: a.productInvoiceValue, additional: a.additionalExpenseTotal, landed: a.totalLandedCost, addPct: a.additionalExpensePercentage ?? '',
+          invoice: a.productInvoiceValue, additional: a.additionalExpenseTotal, addPct: a.additionalExpensePercentage ?? '',
           outstanding: sumMoney(exps.map((e) => outstandingSar(Number(e.original_amount), Number(e.vat_amount), Number(e.paid_amount), Number(e.exchange_rate)))),
         };
       });
@@ -122,10 +120,10 @@ export const REPORTS: ReportDef[] = [
         columns: [
           { header: 'Shipment ID', key: 'code' }, { header: 'PO', key: 'po' }, { header: 'Supplier', key: 'supplier', width: 28 }, { header: 'Origin', key: 'country' },
           { header: 'Method', key: 'method' }, { header: 'Status', key: 'status' }, { header: 'Invoice date', key: 'date', format: 'date' },
-          money('Supplier invoice SAR', 'invoice'), money('Expenses SAR', 'additional'), money('Landed cost SAR', 'landed'), pct('Expenses % of invoice', 'addPct'), money('Outstanding SAR', 'outstanding'),
+          money('Supplier invoice SAR', 'invoice'), money('Total expenses SAR', 'additional'), pct('Expenses % of invoice', 'addPct'), money('Outstanding SAR', 'outstanding'),
         ],
         rows,
-        totals: { code: 'TOTAL', ...totalsOf(rows, ['invoice', 'additional', 'landed', 'outstanding']) },
+        totals: { code: 'TOTAL', ...totalsOf(rows, ['invoice', 'additional', 'outstanding']) },
       }];
     },
   },
@@ -184,8 +182,6 @@ export const REPORTS: ReportDef[] = [
             { m: 'Supplier invoice value (SAR)', v: all.productInvoiceValue.toFixed(2) },
             { m: 'Total expenses (SAR)', v: all.additionalExpenseTotal.toFixed(2) },
             { m: 'Expenses % of supplier invoice', v: all.additionalExpensePercentage === null ? '—' : `${all.additionalExpensePercentage.toFixed(2)}%` },
-            { m: 'Total landed cost (SAR)', v: all.totalLandedCost.toFixed(2) },
-            { m: 'Landed cost excl. recoverable VAT (SAR)', v: all.landedCostExclRecoverableVat.toFixed(2) },
             { m: `Service-invoice VAT (SAR, ${all.lineVatIncluded ? 'included' : 'reported separately'})`, v: all.lineVat.toFixed(2) },
           ],
         },
@@ -195,16 +191,16 @@ export const REPORTS: ReportDef[] = [
   {
     id: 'supplier-wise',
     title: 'Supplier-wise Expense Report',
-    description: 'Invoice value, each cost group, landed cost and expense % of invoice per supplier.',
+    description: 'Invoice value, each cost group, total expenses and expense % of invoice per supplier.',
     orientation: 'landscape',
     build: (ctx) => {
       const m = aggregate(ctx, (s) => s.supplier?.name ?? 'No supplier');
-      const rows = [...m.entries()].map(([k, a]) => ({ name: k, shipments: a.shipments, invoice: a.invoice, ...groupVals(a), landed: a.landed, additional: a.additional, addPct: a.invoice ? percentOf(a.additional, a.invoice) : '' }));
+      const rows = [...m.entries()].map(([k, a]) => ({ name: k, shipments: a.shipments, invoice: a.invoice, ...groupVals(a), additional: a.additional, addPct: a.invoice ? percentOf(a.additional, a.invoice) : '' }));
       return [{
         name: 'By supplier',
-        columns: [{ header: 'Supplier', key: 'name', width: 30 }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Supplier invoice', 'invoice'), ...groupCols(), money('Expenses', 'additional'), money('Landed cost', 'landed'), pct('Expenses % of invoice', 'addPct')],
+        columns: [{ header: 'Supplier', key: 'name', width: 30 }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Supplier invoice', 'invoice'), ...groupCols(), money('Total expenses', 'additional'), pct('Expenses % of invoice', 'addPct')],
         rows,
-        totals: { name: 'TOTAL', ...totalsOf(rows, ['shipments', 'invoice', 'additional', 'landed', ...COST_GROUPS.map((g) => `g_${g}`)]) },
+        totals: { name: 'TOTAL', ...totalsOf(rows, ['shipments', 'invoice', 'additional', ...COST_GROUPS.map((g) => `g_${g}`)]) },
       }];
     },
   },
@@ -217,45 +213,45 @@ export const REPORTS: ReportDef[] = [
       const m = aggregate(ctx, (s) => s.forwarder?.name ?? 'No forwarder');
       const rows = [...m.entries()].map(([k, a]) => ({
         name: k, shipments: a.shipments, invoice: a.invoice, freight: a.groups.freight ?? 0, avgFreight: a.shipments ? (a.groups.freight ?? 0) / a.shipments : 0,
-        freightPct: a.invoice ? percentOf(a.groups.freight ?? 0, a.invoice) : '', clearance: a.groups.clearance ?? 0, transport: a.groups.transportation ?? 0, landed: a.landed, addPct: a.invoice ? percentOf(a.additional, a.invoice) : '',
+        freightPct: a.invoice ? percentOf(a.groups.freight ?? 0, a.invoice) : '', clearance: a.groups.clearance ?? 0, transport: a.groups.transportation ?? 0, additional: a.additional, addPct: a.invoice ? percentOf(a.additional, a.invoice) : '',
       }));
       return [{
         name: 'By forwarder',
-        columns: [{ header: 'Forwarder', key: 'name', width: 30 }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Supplier invoice', 'invoice'), money('Freight', 'freight'), money('Avg freight / shipment', 'avgFreight'), pct('Freight % of invoice', 'freightPct'), money('Clearance', 'clearance'), money('Transport', 'transport'), money('Landed cost', 'landed'), pct('Expenses % of invoice', 'addPct')],
+        columns: [{ header: 'Forwarder', key: 'name', width: 30 }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Supplier invoice', 'invoice'), money('Freight', 'freight'), money('Avg freight / shipment', 'avgFreight'), pct('Freight % of invoice', 'freightPct'), money('Clearance', 'clearance'), money('Transport', 'transport'), money('Total expenses', 'additional'), pct('Expenses % of invoice', 'addPct')],
         rows,
-        totals: { name: 'TOTAL', ...totalsOf(rows, ['shipments', 'invoice', 'freight', 'clearance', 'transport', 'landed']) },
+        totals: { name: 'TOTAL', ...totalsOf(rows, ['shipments', 'invoice', 'freight', 'clearance', 'transport', 'additional']) },
       }];
     },
   },
   {
     id: 'monthly',
     title: 'Monthly Import Cost Report',
-    description: 'Import costs per month (by supplier invoice date): invoice value, cost groups, landed cost and expense % of invoice.',
+    description: 'Import costs per month (by supplier invoice date): invoice value, cost groups, total expenses and expense % of invoice.',
     orientation: 'landscape',
     build: (ctx) => {
       const m = aggregate(ctx, (s) => monthKey(s.supplier_invoice_date ?? s.created_at));
-      const rows = [...m.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, a]) => ({ month: monthLabel(k), shipments: a.shipments, invoice: a.invoice, ...groupVals(a), landed: a.landed, addPct: a.invoice ? percentOf(a.additional, a.invoice) : '' }));
+      const rows = [...m.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, a]) => ({ month: monthLabel(k), shipments: a.shipments, invoice: a.invoice, ...groupVals(a), additional: a.additional, addPct: a.invoice ? percentOf(a.additional, a.invoice) : '' }));
       return [{
         name: 'By month',
-        columns: [{ header: 'Month', key: 'month' }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Supplier invoice', 'invoice'), ...groupCols(), money('Landed cost', 'landed'), pct('Expenses % of invoice', 'addPct')],
+        columns: [{ header: 'Month', key: 'month' }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Supplier invoice', 'invoice'), ...groupCols(), money('Total expenses', 'additional'), pct('Expenses % of invoice', 'addPct')],
         rows,
-        totals: { month: 'TOTAL', ...totalsOf(rows, ['shipments', 'invoice', 'landed', ...COST_GROUPS.map((g) => `g_${g}`)]) },
+        totals: { month: 'TOTAL', ...totalsOf(rows, ['shipments', 'invoice', 'additional', ...COST_GROUPS.map((g) => `g_${g}`)]) },
       }];
     },
   },
   {
     id: 'country-wise',
     title: 'Country-wise Import Cost Report',
-    description: 'Shipments, invoice value, landed cost and expense % of invoice by country of origin.',
+    description: 'Shipments, invoice value, total expenses and expense % of invoice by country of origin.',
     orientation: 'landscape',
     build: (ctx) => {
       const m = aggregate(ctx, (s) => s.country_of_origin || s.supplier?.country || 'Unknown');
-      const rows = [...m.entries()].map(([k, a]) => ({ country: k, shipments: a.shipments, invoice: a.invoice, ...groupVals(a), landed: a.landed, addPct: a.invoice ? percentOf(a.additional, a.invoice) : '' }));
+      const rows = [...m.entries()].map(([k, a]) => ({ country: k, shipments: a.shipments, invoice: a.invoice, ...groupVals(a), additional: a.additional, addPct: a.invoice ? percentOf(a.additional, a.invoice) : '' }));
       return [{
         name: 'By country',
-        columns: [{ header: 'Country', key: 'country', width: 22 }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Supplier invoice', 'invoice'), ...groupCols(), money('Landed cost', 'landed'), pct('Expenses % of invoice', 'addPct')],
+        columns: [{ header: 'Country', key: 'country', width: 22 }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Supplier invoice', 'invoice'), ...groupCols(), money('Total expenses', 'additional'), pct('Expenses % of invoice', 'addPct')],
         rows,
-        totals: { country: 'TOTAL', ...totalsOf(rows, ['shipments', 'invoice', 'landed', ...COST_GROUPS.map((g) => `g_${g}`)]) },
+        totals: { country: 'TOTAL', ...totalsOf(rows, ['shipments', 'invoice', 'additional', ...COST_GROUPS.map((g) => `g_${g}`)]) },
       }];
     },
   },
@@ -268,7 +264,7 @@ export const REPORTS: ReportDef[] = [
       const today = new Date(todayISO()).getTime();
       const rows = ctx.shipments.flatMap((s) =>
         ctx.expensesOf(s.id)
-          .filter((e) => e.payment_status !== 'paid')
+          .filter((e) => e.payment_status === 'unpaid' || e.payment_status === 'partially_paid')
           .map((e) => ({
             code: s.shipment_code, po: s.po_number ?? '', no: e.expense_no, category: e.category?.name ?? '', provider: e.service_provider ?? '', invoice: e.invoice_no ?? '', date: e.invoice_date,
             cur: e.currency_code, payable: sumMoney([Number(e.original_amount), Number(e.vat_amount)]), paid: Number(e.paid_amount),
@@ -295,7 +291,7 @@ export const REPORTS: ReportDef[] = [
         return {
           code: s.shipment_code, supplier: s.supplier?.name ?? '', invoice: a.productInvoiceValue, ...groupVals(a),
           ...Object.fromEntries(COST_GROUPS.filter((g) => g !== 'product_invoice').map((g) => [`p_${g}`, a.productInvoiceValue ? percentOf(a.byGroup[g], a.productInvoiceValue) : ''])),
-          landed: a.totalLandedCost, addPct: a.additionalExpensePercentage ?? '',
+          additional: a.additionalExpenseTotal, addPct: a.additionalExpensePercentage ?? '',
         };
       });
       return [{
@@ -303,10 +299,10 @@ export const REPORTS: ReportDef[] = [
         columns: [
           { header: 'Shipment', key: 'code' }, { header: 'Supplier', key: 'supplier', width: 24 }, money('Supplier invoice', 'invoice'), ...groupCols(),
           ...COST_GROUPS.filter((g) => g !== 'product_invoice').map((g) => pct(`${COST_GROUP_LABELS[g]} % of inv.`, `p_${g}`)),
-          money('Landed cost', 'landed'), pct('Expenses % of invoice', 'addPct'),
+          money('Total expenses', 'additional'), pct('Expenses % of invoice', 'addPct'),
         ],
         rows,
-        totals: { code: 'TOTAL', ...totalsOf(rows, ['invoice', 'landed', ...COST_GROUPS.map((g) => `g_${g}`)]) },
+        totals: { code: 'TOTAL', ...totalsOf(rows, ['invoice', 'additional', ...COST_GROUPS.map((g) => `g_${g}`)]) },
       }];
     },
   },

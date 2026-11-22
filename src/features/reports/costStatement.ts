@@ -3,7 +3,8 @@ import { analyzeShipmentCost, outstandingSar, sumMoney } from '@/lib/calculation
 import { fmtAmount, fmtDate, fmtPct, fmtRate } from '@/lib/format';
 import { PAYMENT_STATUS_LABEL, SHIPMENT_STATUS_LABEL, SHIPPING_METHOD_LABEL } from '@/lib/constants';
 import { toCalcExpense } from '@/hooks/queries';
-import type { ExpenseCategory, ExpenseWithRefs, ShipmentWithRefs } from '@/types/database';
+import type { DocumentWithRefs, ExpenseCategory, ExpenseWithRefs, ShipmentWithRefs } from '@/types/database';
+import { shipmentFolderName } from '@/services/googleDrive';
 
 const right = (cols: number[]) => (d: { column: { index: number }; cell: { styles: { halign: string } } }) => {
   if (cols.includes(d.column.index)) d.cell.styles.halign = 'right';
@@ -12,6 +13,8 @@ const right = (cols: number[]) => (d: { column: { index: number }; cell: { style
 export interface StatementInput {
   shipment: ShipmentWithRefs;
   expenses: ExpenseWithRefs[];
+  /** Drive documents of the shipment; each expense line lists its attachment numbers */
+  documents?: DocumentWithRefs[];
   categories?: ExpenseCategory[];
   includeLineVat: boolean;
   companyName: string;
@@ -62,7 +65,7 @@ export async function generateCostStatement(input: StatementInput): Promise<void
   // Cost analysis
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.text('Expense analysis (SAR)', 36, y);
+  doc.text('Expenses as % of supplier invoice (SAR)', 36, y);
   const inv = analysis.productInvoiceValue;
   const expRows = analysis.byCategory.filter((r) => r.group !== 'product_invoice');
   autoTable(doc, {
@@ -72,16 +75,19 @@ export async function generateCostStatement(input: StatementInput): Promise<void
       ['Supplier invoice value (base)', fmtAmount(inv), inv > 0 ? 'base' : '—'],
       ...expRows.map((r) => [r.label, fmtAmount(r.amount), fmtPct(r.pctOfInvoice)]),
     ],
-    foot: [
-      ['Total expenses', fmtAmount(analysis.additionalExpenseTotal), fmtPct(analysis.additionalExpensePercentage)],
-      ['Total landed cost', fmtAmount(analysis.totalLandedCost), inv > 0 ? fmtPct(100 + (analysis.additionalExpensePercentage ?? 0)) : '—'],
-    ],
+    foot: [['Total expenses', fmtAmount(analysis.additionalExpenseTotal), fmtPct(analysis.additionalExpensePercentage)]],
     theme: 'grid',
     margin: { left: 36, right: 36 },
     styles: { fontSize: 8, cellPadding: 4, lineColor: [229, 233, 240], lineWidth: 0.5 },
     headStyles: { fillColor: PDF_PRIMARY, textColor: 255 },
-    footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
-    didParseCell: right([1, 2]),
+    footStyles: { fillColor: [238, 242, 255], textColor: [15, 23, 42], fontStyle: 'bold' },
+    didParseCell: (d) => {
+      if (d.column.index > 0) d.cell.styles.halign = 'right';
+      if (d.section === 'body' && d.row.index === 0) {
+        d.cell.styles.fillColor = [248, 250, 252];
+        d.cell.styles.fontStyle = 'bold';
+      }
+    },
   });
   y = lastY() + 12;
 
@@ -89,10 +95,9 @@ export async function generateCostStatement(input: StatementInput): Promise<void
     ['Supplier invoice value', `SAR ${fmtAmount(analysis.productInvoiceValue)}`],
     ['Total expenses', `SAR ${fmtAmount(analysis.additionalExpenseTotal)}`],
     ['Expenses % of supplier invoice', fmtPct(analysis.additionalExpensePercentage)],
-    ['Total landed cost', `SAR ${fmtAmount(analysis.totalLandedCost)}`],
-    ['Landed cost excl. recoverable VAT', `SAR ${fmtAmount(analysis.landedCostExclRecoverableVat)}`],
-    [analysis.lineVatIncluded ? 'Service-invoice VAT (included above)' : 'Service-invoice VAT (reported separately)', `SAR ${fmtAmount(analysis.lineVat)}`],
   ];
+  if (analysis.lineVat > 0)
+    summary.push([analysis.lineVatIncluded ? 'Service-invoice VAT (included above)' : 'Service-invoice VAT (not included)', `SAR ${fmtAmount(analysis.lineVat)}`]);
   autoTable(doc, {
     startY: y,
     body: summary,
@@ -114,33 +119,47 @@ export async function generateCostStatement(input: StatementInput): Promise<void
   doc.setFontSize(10);
   doc.text('Expense details', 36, y);
   const active = expenses.filter((e) => !e.is_deleted);
+  const isInv = (e: ExpenseWithRefs) => e.category?.cost_group === 'product_invoice';
+  const ordered = [...active.filter(isInv), ...active.filter((e) => !isInv(e))];
+  const docsOf = (e: ExpenseWithRefs) => (input.documents ?? []).filter((d) => d.expense_id === e.id && !d.is_deleted).map((d) => d.doc_no);
+  const payable = active.filter((e) => !isInv(e));
   autoTable(doc, {
     startY: y + 6,
-    head: [['Expense', 'Category', 'Provider / invoice', 'Original', 'Rate', 'SAR', 'VAT SAR', 'Payment']],
-    body: active.map((e) => [
+    head: [['Expense', 'Category', 'Provider / invoice', 'Original', 'Rate', 'SAR', 'Payment', 'Attachment']],
+    body: ordered.map((e) => [
       e.expense_no,
       e.category?.name ?? '',
       `${e.service_provider ?? ''}\n${e.invoice_no ?? ''} ${e.invoice_date ? `(${fmtDate(e.invoice_date)})` : ''}`,
       `${e.currency_code} ${fmtAmount(e.original_amount)}`,
       fmtRate(e.exchange_rate),
       fmtAmount(e.amount_sar),
-      Number(e.vat_amount_sar) ? fmtAmount(e.vat_amount_sar) : '—',
-      PAYMENT_STATUS_LABEL[e.payment_status],
+      isInv(e) ? '—' : PAYMENT_STATUS_LABEL[e.payment_status],
+      docsOf(e).join('\n') || '—',
     ]),
-    foot: [['Total', '', '', '', '', fmtAmount(sumMoney(active.map((e) => Number(e.amount_sar)))), fmtAmount(analysis.lineVat), '']],
+    foot: [['Total expenses (excl. supplier invoice)', '', '', '', '', fmtAmount(analysis.additionalExpenseTotal), '', '']],
     theme: 'grid',
     margin: { left: 36, right: 36 },
     styles: { fontSize: 7, cellPadding: 3, lineColor: [229, 233, 240], lineWidth: 0.5 },
     headStyles: { fillColor: PDF_PRIMARY, textColor: 255 },
     footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
-    didParseCell: right([3, 4, 5, 6]),
+    didParseCell: (d) => {
+      right([3, 4, 5])(d);
+      if (d.section === 'foot' && d.column.index === 0) d.cell.colSpan = 5;
+    },
   });
   y = lastY() + 8;
-  const outstanding = sumMoney(active.map((e) => outstandingSar(Number(e.original_amount), Number(e.vat_amount), Number(e.paid_amount), Number(e.exchange_rate))));
+  const outstanding = sumMoney(payable.map((e) => outstandingSar(Number(e.original_amount), Number(e.vat_amount), Number(e.paid_amount), Number(e.exchange_rate))));
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.text(`Outstanding payments: SAR ${fmtAmount(outstanding)}  ·  Expenses: ${active.length}  ·  Unpaid/partial: ${active.filter((e) => e.payment_status !== 'paid').length}`, 36, y + 6);
-  y += 20;
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(
+    `Outstanding payments: SAR ${fmtAmount(outstanding)}  ·  Unpaid/partial: ${payable.filter((e) => e.payment_status === 'unpaid' || e.payment_status === 'partially_paid').length}  ·  Supplier invoice has no payment status.`,
+    36,
+    y + 6,
+  );
+  doc.text(`Attachments are stored in Google Drive (folder "${shipmentFolderName(s.po_number, s.shipment_code)}").`, 36, y + 17);
+  doc.setTextColor(17, 24, 39);
+  y += 28;
 
   // Sign-off
   if (y > doc.internal.pageSize.getHeight() - 90) {

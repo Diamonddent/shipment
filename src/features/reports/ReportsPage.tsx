@@ -10,6 +10,7 @@ import { exportCSV, exportExcel, exportPDF, stamp, type ExportTable } from '@/li
 import { errorMessage } from '@/lib/errors';
 import { shipmentsService } from '@/services/shipments';
 import { REPORTS, buildContext, filterLabels, type ReportData, type ReportDef, type ReportFilters } from './reportBuilders';
+import { documentsService } from '@/services/documents';
 import { generateCostStatement } from './costStatement';
 
 export default function ReportsPage() {
@@ -69,6 +70,7 @@ export default function ReportsPage() {
       await generateCostStatement({
         shipment: s,
         expenses: data.expenses.filter((e) => e.shipment_id === s.id),
+        documents: await documentsService.listForShipment(s.id),
         categories: data.categories,
         includeLineVat: settings.includeLineVat,
         companyName: settings.companyName,

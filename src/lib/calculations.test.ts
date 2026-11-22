@@ -58,29 +58,22 @@ describe('rounding & conversion', () => {
 describe('shipment cost analysis (spec example)', () => {
   const a = analyzeShipmentCost(specExample);
 
-  it('computes total landed cost', () => {
-    expect(a.totalLandedCost).toBe(120000);
+  it('computes supplier invoice and total expenses (invoice excluded)', () => {
     expect(a.productInvoiceValue).toBe(90000);
-  });
-  it('computes expense percentage of total landed cost', () => {
-    const pct = Object.fromEntries(a.groupRows.map((r) => [r.key, r.percentage]));
-    expect(pct.product_invoice).toBe(75);
-    expect(pct.freight).toBe(6.67);
-    expect(pct.customs_duty).toBe(4.17);
-    expect(pct.import_vat).toBe(10);
-    expect(pct.clearance).toBe(1.67);
-    expect(pct.other).toBe(2.5);
-  });
-  it('computes additional expense total, additional % and cost increase % separately', () => {
     expect(a.additionalExpenseTotal).toBe(30000);
-    // 30,000 / 90,000 = 33.33 % over invoice — NOT the 25 % share of landed cost
-    expect(a.additionalExpensePercentage).toBe(33.33);
-    expect(a.costIncreasePercentage).toBe(33.33);
-    expect(100 - (a.groupRows.find((r) => r.key === 'product_invoice')?.percentage ?? 0)).toBe(25);
   });
-  it('exposes landed cost excluding recoverable import VAT', () => {
+  it('computes each expense share of total expenses (supplier invoice = 0)', () => {
+    const pct = Object.fromEntries(a.groupRows.map((r) => [r.key, r.percentage]));
+    expect(pct.product_invoice).toBe(0);
+    expect(pct.freight).toBe(26.67);
+    expect(pct.import_vat).toBe(40);
+  });
+  it('total expenses % of supplier invoice', () => {
+    // 30,000 / 90,000 = 33.33 %
+    expect(a.additionalExpensePercentage).toBe(33.33);
+  });
+  it('tracks recoverable import VAT', () => {
     expect(a.recoverableVat).toBe(12000);
-    expect(a.landedCostExclRecoverableVat).toBe(108000);
   });
   it('reconciled display percentages add to exactly 100', () => {
     const p = reconciledPercentages(a.groupRows.map((r) => r.amount));
@@ -89,11 +82,11 @@ describe('shipment cost analysis (spec example)', () => {
   it('returns null percentages when there is no product invoice', () => {
     const b = analyzeShipmentCost([exp('Freight', 'freight', 500)]);
     expect(b.additionalExpensePercentage).toBeNull();
-    expect(b.totalLandedCost).toBe(500);
+    expect(b.additionalExpenseTotal).toBe(500);
   });
   it('ignores soft-deleted expenses', () => {
     const b = analyzeShipmentCost([...specExample, exp('Other', 'other', 9999, { is_deleted: true })]);
-    expect(b.totalLandedCost).toBe(120000);
+    expect(b.additionalExpenseTotal).toBe(30000);
   });
 });
 
@@ -104,15 +97,14 @@ describe('VAT is never double counted', () => {
   ];
   it('line VAT is reported separately by default', () => {
     const a = analyzeShipmentCost(withLineVat);
-    expect(a.totalLandedCost).toBe(120000);
+    expect(a.additionalExpenseTotal).toBe(30000);
     expect(a.lineVat).toBe(300);
     expect(a.byGroup.import_vat).toBe(12000);
   });
-  it('line VAT is added once when the setting says so, and excluded from the ex-VAT figure', () => {
+  it('line VAT is added once to total expenses when the setting says so', () => {
     const a = analyzeShipmentCost(withLineVat, { includeLineVat: true });
-    expect(a.totalLandedCost).toBe(120300);
+    expect(a.additionalExpenseTotal).toBe(30300);
     expect(a.byGroup.import_vat).toBe(12300);
-    expect(a.landedCostExclRecoverableVat).toBe(108000);
   });
 });
 
@@ -168,15 +160,15 @@ describe('portfolio summary', () => {
     const s = summarizePortfolio(shipments);
     expect(s.totalShipments).toBe(2);
     expect(s.productInvoiceValue).toBe(100000);
-    expect(s.totalLandedCost).toBe(131000);
     expect(s.additionalExpenses).toBe(31000);
     expect(s.freight).toBe(9000);
     expect(s.vat).toBe(12000);
     expect(s.customsDuty).toBe(5000);
     expect(s.pendingShipments).toBe(1);
     expect(s.completedShipments).toBe(1);
-    expect(s.unpaidExpenseCount).toBe(2);
-    expect(s.unpaidExpenseAmount).toBe(5000);
+    // supplier invoice has no payment status, so only the unpaid freight counts
+    expect(s.unpaidExpenseCount).toBe(1);
+    expect(s.unpaidExpenseAmount).toBe(1000);
     expect(s.averageAdditionalPct).toBe(round2((33.33 + 10) / 2));
     expect(s.weightedAdditionalPct).toBe(31);
   });

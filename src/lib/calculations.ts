@@ -3,7 +3,7 @@
  *
  * Every number shown on the dashboard, shipment pages and reports comes from the pure functions in this file. They are unit-tested
  * in calculations.test.ts. The SQL view v_shipment_cost_summary implements the
- * same landed-cost formula for database-side reporting / ERP integration.
+ * same formula (expenses as % of supplier invoice) for database-side reporting / ERP integration.
  *
  * Money is handled in integer halalas (1/100 SAR) wherever sums are produced, so totals always reconcile to 2 decimals.
  */
@@ -104,7 +104,7 @@ export interface CostRow {
   label: string;
   group: CostGroup;
   amount: number;
-  /** Expense Percentage = (Individual Expense Amount / Total Landed Cost) × 100 */
+  /** Share of total expenses (supplier invoice excluded; supplier invoice row = 0) */
   percentage: number;
   /** % of Supplier Invoice = (Expense Amount / Supplier Invoice Value) × 100 (null when no supplier invoice) */
   pctOfInvoice: number | null;
@@ -115,17 +115,12 @@ export interface ShipmentCostAnalysis {
   byCategory: CostRow[];
   groupRows: CostRow[];
   productInvoiceValue: number;
-  totalLandedCost: number;
-  /** Additional Expense Total = Total Landed Cost − Supplier Invoice Value */
+  /** Total Expenses = sum of every expense except the supplier invoice (+ line VAT when the setting is on) */
   additionalExpenseTotal: number;
-  /** Additional Expense % = (Additional Expense Total / Supplier Invoice Value) × 100 (null if no invoice) */
+  /** Expenses % of supplier invoice = (Total Expenses / Supplier Invoice Value) × 100 (null if no invoice) */
   additionalExpensePercentage: number | null;
-  /** Cost Increase % = ((Total Landed Cost − Supplier Invoice Value) / Supplier Invoice Value) × 100 */
-  costIncreasePercentage: number | null;
-  /** Recoverable input VAT (Import VAT category) included in the total */
+  /** Recoverable input VAT (Import VAT category) included in total expenses */
   recoverableVat: number;
-  /** Total landed cost excluding recoverable VAT (Import VAT and, if included, service-invoice VAT) */
-  landedCostExclRecoverableVat: number;
   /** Sum of VAT amounts entered on service invoices (reported separately) */
   lineVat: number;
   /** True when line VAT was added to the total (setting) */
@@ -134,7 +129,7 @@ export interface ShipmentCostAnalysis {
 }
 
 export interface CostOptions {
-  /** Setting include_line_vat_in_landed_cost: add per-line VAT amounts to landed cost. Default false. */
+  /** Setting include_line_vat_in_expenses: add per-line VAT amounts to total expenses. Default false. */
   includeLineVat?: boolean;
 }
 
@@ -152,12 +147,11 @@ function emptyGroups(): Record<CostGroup, number> {
 }
 
 /**
- * Total Landed Cost = Supplier Invoice + Freight + Insurance + Customs Duty
- *                     + Import VAT + Clearance + Transportation + Other
+ * Total Expenses = Freight + Insurance + Customs Duty + Import VAT + Clearance + Transportation + Other
+ * Expenses % of Supplier Invoice = Total Expenses / Supplier Invoice × 100
  *
- * Import VAT is its own category and is included in the total (as the spec
- * formula requires). The per-line `vat_amount_sar` on service invoices is
- * informational and reported separately; it is only added when
+ * The supplier invoice is the base, never part of total expenses. The per-line
+ * `vat_amount_sar` on service invoices is informational and only added when
  * `includeLineVat` is set — so VAT is never counted twice.
  */
 export function analyzeShipmentCost(expenses: ExpenseForCalc[], options: CostOptions = {}): ShipmentCostAnalysis {
@@ -185,9 +179,9 @@ export function analyzeShipmentCost(expenses: ExpenseForCalc[], options: CostOpt
   }
 
   const totalCents = COST_GROUPS.reduce((a, g) => a + groupCents[g], 0);
-  const totalLandedCost = fromCents(totalCents);
   const productInvoiceValue = fromCents(groupCents.product_invoice);
   const additionalExpenseTotal = fromCents(totalCents - groupCents.product_invoice);
+  const shareOf = (g: CostGroup, amt: number) => (g === 'product_invoice' ? 0 : percentOf(amt, additionalExpenseTotal));
   const additionalPct = productInvoiceValue > 0 ? percentOf(additionalExpenseTotal, productInvoiceValue) : null;
 
   const byGroup = emptyGroups();
@@ -198,7 +192,7 @@ export function analyzeShipmentCost(expenses: ExpenseForCalc[], options: CostOpt
     label: COST_GROUP_LABELS[g],
     group: g,
     amount: byGroup[g],
-    percentage: percentOf(byGroup[g], totalLandedCost),
+    percentage: shareOf(g, byGroup[g]),
     pctOfInvoice: productInvoiceValue > 0 ? percentOf(byGroup[g], productInvoiceValue) : null,
   }));
 
@@ -210,7 +204,7 @@ export function analyzeShipmentCost(expenses: ExpenseForCalc[], options: CostOpt
       label: v.label,
       group: v.group,
       amount: fromCents(v.cents),
-      percentage: percentOf(fromCents(v.cents), totalLandedCost),
+      percentage: shareOf(v.group, fromCents(v.cents)),
       pctOfInvoice: productInvoiceValue > 0 ? percentOf(fromCents(v.cents), productInvoiceValue) : null,
     }));
 
@@ -219,12 +213,9 @@ export function analyzeShipmentCost(expenses: ExpenseForCalc[], options: CostOpt
     byCategory,
     groupRows,
     productInvoiceValue,
-    totalLandedCost,
     additionalExpenseTotal,
     additionalExpensePercentage: additionalPct,
-    costIncreasePercentage: additionalPct,
     recoverableVat: fromCents(recoverableCents),
-    landedCostExclRecoverableVat: fromCents(totalCents - recoverableCents - lineVatAdded),
     lineVat: fromCents(lineVatCents),
     lineVatIncluded: includeLineVat,
     expenseCount: active.length,
@@ -271,7 +262,7 @@ export function largestRemainder(totalUnits: number, weights: number[]): number[
 // Payments
 // ---------------------------------------------------------------------------
 
-export type PaymentStatus = 'unpaid' | 'partially_paid' | 'paid';
+export type PaymentStatus = 'unpaid' | 'partially_paid' | 'paid' | 'not_applicable';
 
 /** Total payable on an expense line = original amount + service-invoice VAT (same currency). */
 export function expensePayable(originalAmount: number, vatAmount: number | null | undefined): number {
@@ -322,7 +313,6 @@ export interface PortfolioSummary {
   customsDuty: number;
   vat: number;
   additionalExpenses: number;
-  totalLandedCost: number;
   /** Mean of per-shipment Additional Expense % (shipments with a supplier invoice only) */
   averageAdditionalPct: number | null;
   /** Portfolio-weighted additional % = total additional / total invoice */
@@ -346,7 +336,6 @@ export function summarizePortfolio(
   const byGroupCents = emptyGroups();
   const perShipment = new Map<string, ShipmentCostAnalysis>();
   let additionalCents = 0;
-  let totalCents = 0;
   let unpaidCount = 0;
   let unpaidCents = 0;
   const pcts: number[] = [];
@@ -356,11 +345,11 @@ export function summarizePortfolio(
     perShipment.set(s.id, a);
     for (const g of COST_GROUPS) byGroupCents[g] += toCents(a.byGroup[g]);
     additionalCents += toCents(a.additionalExpenseTotal);
-    totalCents += toCents(a.totalLandedCost);
     if (a.additionalExpensePercentage !== null) pcts.push(a.additionalExpensePercentage);
     for (const e of s.expenses) {
       if (e.is_deleted) continue;
-      if (e.payment_status && e.payment_status !== 'paid') {
+      if (e.cost_group === 'product_invoice') continue; // supplier invoice has no payment status
+      if (e.payment_status && e.payment_status !== 'paid' && e.payment_status !== 'not_applicable') {
         unpaidCount += 1;
         unpaidCents += toCents(e.outstanding_sar ?? e.amount_sar);
       }
@@ -375,7 +364,6 @@ export function summarizePortfolio(
     customsDuty: byGroup.customs_duty,
     vat: byGroup.import_vat,
     additionalExpenses: fromCents(additionalCents),
-    totalLandedCost: fromCents(totalCents),
     averageAdditionalPct: pcts.length ? roundTo(pcts.reduce((a, b) => a + b, 0) / pcts.length, 2) : null,
     weightedAdditionalPct: byGroupCents.product_invoice > 0 ? percentOf(additionalCents, byGroupCents.product_invoice) : null,
     pendingShipments: list.filter((s) => PENDING_STATUSES.includes(s.status)).length,

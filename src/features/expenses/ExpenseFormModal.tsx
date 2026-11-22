@@ -3,10 +3,10 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Paperclip } from 'lucide-react';
+import { ExternalLink, Paperclip, X } from 'lucide-react';
 import { Alert, Button, Checkbox, Field, Input, Modal, Select, Textarea, useToast } from '@/components/ui';
 import { CurrencyRateFields } from '@/features/shared/CurrencyRateFields';
-import { qk, useCategories, useForwarders, useShipments, useSuppliers } from '@/hooks/queries';
+import { qk, useCategories, useForwarders, useSettings, useShipmentDocuments, useShipments, useSuppliers } from '@/hooks/queries';
 import { useAuth } from '@/hooks/useAuth';
 import { expensesService, type ExpenseInput } from '@/services/expenses';
 import { documentsService } from '@/services/documents';
@@ -80,7 +80,8 @@ export function ExpenseFormModal({
   const forwarders = useForwarders();
   const [dupes, setDupes] = useState<ExpenseWithRefs[] | null>(null);
   const [override, setOverride] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const { settings } = useSettings();
   const [docType, setDocType] = useState<DocType>('other');
   const form = useForm<Form>({ resolver: zodResolver(schema) });
   const { register, watch, formState } = form;
@@ -90,7 +91,7 @@ export function ExpenseFormModal({
     if (!open) return;
     setDupes(null);
     setOverride(expense?.duplicate_override ?? false);
-    setFile(null);
+    setFiles([]);
     const presetCat = categories.data?.find((c) => c.code === presetCategoryCode);
     form.reset({
       shipment_id: expense?.shipment_id ?? shipmentId ?? '',
@@ -125,6 +126,18 @@ export function ExpenseFormModal({
   const vat = Number(watch('vat_amount')) || 0;
   const currency = watch('currency_code');
   const initialPayment = watch('initial_payment');
+  const isInvoice = category?.cost_group === 'product_invoice';
+  const shipmentDocs = useShipmentDocuments(open && expense ? expense.shipment_id : undefined);
+  const existingDocs = expense ? (shipmentDocs.data ?? []).filter((d) => d.expense_id === expense.id) : [];
+  const pickFiles = (list: FileList | null) => {
+    const arr = Array.from(list ?? []);
+    const bad = arr.filter((f) => !ALLOWED_UPLOAD_EXT.includes((f.name.split('.').pop() ?? '').toLowerCase()));
+    const big = arr.filter((f) => f.size > settings.maxUploadMb * 1024 * 1024);
+    if (bad.length) toast.error('Only PDF, JPG and PNG files are allowed', bad.map((f) => f.name).join(', '));
+    if (big.length) toast.error(`Files larger than ${settings.maxUploadMb} MB were skipped`, big.map((f) => f.name).join(', '));
+    const ok = arr.filter((f) => !bad.includes(f) && !big.includes(f));
+    setFiles((prev) => [...prev, ...ok]);
+  };
   const amountSar = toSar(amount, rate);
   const vatSar = toSar(vat, rate);
 
@@ -165,12 +178,12 @@ export function ExpenseFormModal({
         original_amount: v.original_amount,
         exchange_rate: v.currency_code === 'SAR' ? 1 : v.exchange_rate,
         vat_amount: v.vat_amount || 0,
-        payment_method: (v.payment_method || null) as PaymentMethod | null,
+        payment_method: isInvoice ? null : ((v.payment_method || null) as PaymentMethod | null),
         notes: v.notes,
         duplicate_override: forceOverride || override,
       });
       const saved = expense ? await expensesService.update(expense.id, payload) : await expensesService.create(payload);
-      if (!expense && v.initial_payment !== 'unpaid') {
+      if (!expense && !isInvoice && v.initial_payment !== 'unpaid') {
         const amt = v.initial_payment === 'paid' ? expensePayable(v.original_amount, v.vat_amount) : Number(v.partial_amount);
         if (amt > 0)
           await expensesService.addPayment({
@@ -183,14 +196,19 @@ export function ExpenseFormModal({
           });
       }
       let uploadError: string | null = null;
-      if (file) {
+      if (files.length) {
         const shp = shipments.data?.find((s) => s.id === v.shipment_id) ?? saved.shipment;
         if (shp && session) {
-          try {
-            await documentsService.upload({ shipment: shp, file, docType, expenseId: saved.id, userId: session.user.id });
-          } catch (err) {
-            uploadError = errorMessage(err);
+          const failed: string[] = [];
+          for (const f of files) {
+            try {
+              await documentsService.upload({ shipment: shp, file: f, docType, expenseId: saved.id, userId: session.user.id });
+            } catch (err) {
+              failed.push(`${f.name}: ${errorMessage(err)}`);
+              if (/authori|cancel|popup/i.test(errorMessage(err))) break;
+            }
           }
+          if (failed.length) uploadError = failed.join(' · ');
         }
       }
       return { saved, uploadError };
@@ -200,7 +218,7 @@ export function ExpenseFormModal({
       qc.invalidateQueries({ queryKey: qk.expenses });
       qc.invalidateQueries({ queryKey: ['documents'] });
       qc.invalidateQueries({ queryKey: ['shipment'] });
-      toast.success(expense ? 'Expense updated' : `Expense ${res.saved.expense_no} added`, `${fmtMoney(res.saved.amount_sar)}`);
+      toast.success(expense ? 'Expense updated' : `Expense ${res.saved.expense_no} added`, `${fmtMoney(res.saved.amount_sar)}${files.length && !res.uploadError ? ` · ${files.length} attachment(s) saved to Google Drive` : ''}`);
       if (res.uploadError) toast.error('Expense saved, but the attachment was not uploaded', res.uploadError);
       onClose();
     },
@@ -266,28 +284,81 @@ export function ExpenseFormModal({
           <Field label="Description" className="sm:col-span-2 lg:col-span-3"><Input {...register('description')} /></Field>
           <Field label="Invoice number" hint="Used for duplicate detection"><Input {...register('invoice_no')} /></Field>
           <Field label="Invoice date"><Input type="date" {...register('invoice_date')} /></Field>
-          <Field label="Payment method">
-            <Select {...register('payment_method')}>
-              <option value="">—</option>
-              {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-            </Select>
-          </Field>
+          {!isInvoice && (
+            <Field label="Payment method">
+              <Select {...register('payment_method')}>
+                <option value="">—</option>
+                {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </Select>
+            </Field>
+          )}
           <CurrencyRateFields form={form} currencyName="currency_code" rateName="exchange_rate" />
           <Field label={`Original amount (${currency || '—'})`} required error={e.original_amount?.message}>
             <Input type="number" step="0.01" min="0" {...register('original_amount', { valueAsNumber: true })} invalid={!!e.original_amount} />
           </Field>
-          <Field label={`VAT amount (${currency || '—'}), if applicable`} error={e.vat_amount?.message} hint="VAT on a service invoice — reported separately, not added to landed cost by default">
+          <Field label={`VAT amount (${currency || '—'}), if applicable`} error={e.vat_amount?.message} hint="VAT on a service invoice — reported separately, not added to total expenses by default">
             <Input type="number" step="0.01" min="0" {...register('vat_amount', { valueAsNumber: true })} />
           </Field>
           <div className="rounded-lg border border-accent-100 bg-accent-50/60 px-4 py-3 dark:border-navy-700 dark:bg-navy-800 sm:col-span-2 lg:col-span-1">
             <p className="text-xs text-slate-500">Amount in SAR</p>
             <p className="text-lg font-semibold tabular-nums text-primary dark:text-white">{fmtMoney(amountSar)}</p>
             {vat > 0 && <p className="text-xs text-slate-500">+ VAT {fmtMoney(vatSar)} · payable {fmtMoney(toSar(expensePayable(amount, vat), rate))}</p>}
-            {category?.is_recoverable_vat && <p className="mt-1 text-[11px] text-slate-500">Import VAT — included in landed cost, shown separately as recoverable.</p>}
+            {category?.is_recoverable_vat && <p className="mt-1 text-[11px] text-slate-500">Import VAT — included in total expenses, shown separately as recoverable.</p>}
           </div>
         </div>
 
-        {!expense ? (
+        <div className="rounded-lg border-2 border-dashed border-accent/40 bg-accent-50/30 p-4 dark:border-navy-600 dark:bg-navy-800/40">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-100">
+            <Paperclip className="h-4 w-4 text-accent" /> Attachment for this {isInvoice ? 'supplier invoice' : 'expense'}
+            <span className="text-xs font-normal text-slate-500">PDF, JPG, PNG · saved to Google Drive</span>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className={`inline-flex cursor-pointer items-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-medium shadow-sm hover:border-accent hover:text-accent dark:border-navy-700 dark:bg-navy-900 ${!googleDrive.isConfigured() ? 'pointer-events-none opacity-50' : ''}`}>
+              <Paperclip className="h-4 w-4" /> Choose file(s)
+              <input
+                type="file"
+                multiple
+                className="hidden"
+                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                disabled={!googleDrive.isConfigured()}
+                onChange={(ev) => { pickFiles(ev.target.files); ev.target.value = ''; }}
+              />
+            </label>
+            <Field label="Document type" className="w-56">
+              <Select value={docType} onChange={(ev) => setDocType(ev.target.value as DocType)}>
+                {DOC_TYPES.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+              </Select>
+            </Field>
+          </div>
+          {(files.length > 0 || existingDocs.length > 0) && (
+            <ul className="mt-3 space-y-1 text-sm">
+              {existingDocs.map((d) => (
+                <li key={d.id} className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                  <Paperclip className="h-3.5 w-3.5 text-green-600" />
+                  <span className="font-medium">{d.doc_no}</span> <span className="truncate">{d.original_filename}</span>
+                  {d.drive_web_link && <a href={d.drive_web_link} target="_blank" rel="noreferrer" className="text-accent hover:underline"><ExternalLink className="h-3.5 w-3.5" /></a>}
+                </li>
+              ))}
+              {files.map((f, i) => (
+                <li key={`${f.name}-${i}`} className="flex items-center gap-2">
+                  <span className="rounded bg-amber-100 px-1.5 text-[10px] font-semibold uppercase text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">new</span>
+                  <span className="truncate">{f.name}</span>
+                  <span className="text-xs text-slate-400">{(f.size / 1024 / 1024).toFixed(2)} MB</span>
+                  <button type="button" className="text-slate-400 hover:text-red-600" aria-label={`Remove ${f.name}`} onClick={() => setFiles(files.filter((_, j) => j !== i))}><X className="h-3.5 w-3.5" /></button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-xs text-slate-500">
+            {googleDrive.isConfigured()
+              ? 'Uploaded when you save. You may be asked to allow Google Drive access. Only file details are stored in the database.'
+              : 'Google Drive is not configured (VITE_GOOGLE_CLIENT_ID), so attachments are disabled.'}
+          </p>
+        </div>
+
+        {isInvoice ? (
+          <p className="text-xs text-slate-500">The supplier invoice is the base for the expense percentages and has no paid / unpaid status.</p>
+        ) : !expense ? (
           <div className="grid gap-4 rounded-lg border border-line p-4 dark:border-navy-700 sm:grid-cols-3">
             <Field label="Payment status">
               <Select {...register('initial_payment')}>
@@ -312,38 +383,6 @@ export function ExpenseFormModal({
 
         <Field label="Expense notes"><Textarea rows={2} {...register('notes')} /></Field>
 
-        <div className="rounded-lg border border-dashed border-line p-4 dark:border-navy-700">
-          <div className="flex flex-wrap items-end gap-3">
-            <Field label="Attachment (PDF, JPG, PNG) — saved to Google Drive" className="min-w-[220px] flex-1">
-              <Input
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                onChange={(ev) => {
-                  const f = ev.target.files?.[0] ?? null;
-                  if (f && !ALLOWED_UPLOAD_EXT.includes((f.name.split('.').pop() ?? '').toLowerCase())) {
-                    toast.error('Only PDF, JPG and PNG files are allowed');
-                    ev.target.value = '';
-                    return;
-                  }
-                  setFile(f);
-                }}
-                className="py-1.5"
-                disabled={!googleDrive.isConfigured()}
-              />
-            </Field>
-            <Field label="Document type" className="w-56">
-              <Select value={docType} onChange={(ev) => setDocType(ev.target.value as DocType)}>
-                {DOC_TYPES.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
-              </Select>
-            </Field>
-          </div>
-          <p className="mt-2 flex items-center gap-1 text-xs text-slate-500">
-            <Paperclip className="h-3.5 w-3.5" />
-            {googleDrive.isConfigured()
-              ? 'You may be asked to allow Google Drive access. Only file metadata is stored in the database.'
-              : 'Google Drive is not configured (VITE_GOOGLE_CLIENT_ID), so attachments are disabled.'}
-          </p>
-        </div>
         {expense && (
           <Checkbox
             label="Allow as a separate line even if it matches another expense"

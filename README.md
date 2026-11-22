@@ -1,6 +1,6 @@
 # Shipment Cost Control & Analysis — DIAMOND DENT TRADING CO.
 
-A web application for managing international shipments of medical and dental supplies. It records supplier invoices, freight, customs duty, import VAT, clearance and every other import cost. It calculates the **landed cost of each shipment and each product**, and shows every expense as a percentage of the total landed cost.
+A web application for managing international shipments of medical and dental supplies. It records supplier invoices, freight, customs duty, import VAT, clearance and every other import cost. It shows every expense, and the total expenses, as a percentage of the supplier invoice value.
 
 - **Frontend:** Vite + React 18 + TypeScript (strict), Tailwind CSS (class-based dark mode), Recharts, lucide-react, React Router (HashRouter), TanStack Query, react-hook-form + zod
 - **Backend:** Supabase (PostgreSQL, Auth, Row Level Security). No Supabase Storage is used.
@@ -15,7 +15,7 @@ A web application for managing international shipments of medical and dental sup
 | Route | Module |
 |---|---|
 | `#/login` | Sign in, forgot password, reset password |
-| `#/` | **Dashboard**: 11 KPIs and 4 charts from live data (expense distribution, monthly expenses and landed-cost trend, shipment comparison, country of origin). Filters by date, supplier and status, a cancelled-shipments toggle, and a data-warnings panel |
+| `#/` | **Dashboard**: 11 KPIs and 4 charts from live data (expense distribution, monthly expenses and % of invoice, shipment comparison, country of origin). Filters by date, supplier and status, a cancelled-shipments toggle, and a data-warnings panel |
 | `#/shipments` | **Shipment Register**: search, sort, filters (supplier, status, country, date, archived), duplicate, archive/restore, export |
 | `#/shipments/new` | **New Shipment wizard**: the 9-step workflow (create → supplier invoice → products → expenses → documents → review → landed cost → complete → export) |
 | `#/shipments/:id` | **Shipment Details**: workflow stepper, warnings, tabs for Overview (cost analysis table and chart), Expenses, Products, Landed Cost, Documents and History (audit) |
@@ -30,16 +30,12 @@ A web application for managing international shipments of medical and dental sup
 All financial math lives in pure, unit-tested functions in `src/lib/calculations.ts`. Money is summed and allocated in integer halalas, so totals always reconcile to 2 decimals.
 
 - **Amount in SAR** = Original Amount × Exchange Rate, rounded half away from zero (same as PostgreSQL `round`). The rate is **stored on each expense, product line and shipment at entry time**. Adding a new rate in Settings only changes the *suggested* rate for new entries; it never rewrites history.
-- **Total Landed Cost** = Product Invoice + Freight + Insurance + Customs Duty + Import VAT + Clearance + Transportation + Other.
-- **Expense %** = expense ÷ total landed cost × 100. This is shown separately from:
-  - **Additional Expense Total** = landed cost − product invoice value
-  - **Additional Expense %** = additional ÷ product invoice × 100
-  - **Cost Increase %** = (landed − invoice) ÷ invoice × 100
-- **VAT is never counted twice.**
-  - *Import VAT* (paid at customs) is its own category. It is included in landed cost, as the formula requires, and flagged as recoverable. Every screen also shows **landed cost excluding recoverable VAT**.
-  - The *VAT amount* field on a service invoice (freight, clearance) is informational. It is reported separately and **not** added to landed cost, unless an admin turns on *Settings → Application → Add service-invoice VAT to landed cost*.
+- **Supplier Invoice** (category *Supplier Invoice*) is the base. It is not an expense and has **no paid / unpaid status** (stored as `not_applicable`; payments are blocked).
+- **Total Expenses** = Freight + Insurance + Customs Duty + Import VAT + Clearance + Transportation + Other (everything except the supplier invoice).
+- **Key metric:** each expense and the Total Expenses as a **% of the supplier invoice** (expense ÷ supplier invoice × 100). There is no landed cost and no product/item costing (migrations 0006 and 0007, 2026-11-22).
+- **VAT is never counted twice.** Import VAT paid at customs is its own category. The *VAT amount* on a service invoice is reported separately unless *Settings → Application → Add service-invoice VAT to total expenses* is on.
 - **Payable amount** of an expense = original amount + its VAT amount. Payment status (Unpaid / Partially Paid / Paid) is derived by the database from `expense_payments`. Overpayment is rejected.
-- **Key metric:** each expense and the total expenses as a % of the supplier invoice value (expense ÷ supplier invoice × 100). Products and item-level landed cost were removed (migration 0006, 2026-11-22).
+- **Attachments**: each expense line has its own attachment (PDF/JPG/PNG) uploaded to Google Drive from the expense form or the *Attachment* column; `shipment_documents.expense_id` links the file to the line.
 - **Cancelled shipments** are excluded from summaries unless *Include cancelled* is ticked. Archived shipments are hidden from the register and dashboard.
 
 ## 3. Local setup

@@ -329,17 +329,16 @@ function AppTab() {
   const qc = useQueryClient();
   const toast = useToast();
   const { settings, isLoading } = useSettings();
-  const [v, setV] = useState({ companyName: '', companyAddress: '', companyVatNumber: '', includeLineVat: false, showExcl: true, employeesViewAll: true, maxUploadMb: 25 });
+  const [v, setV] = useState({ companyName: '', companyAddress: '', companyVatNumber: '', includeLineVat: false, employeesViewAll: true, maxUploadMb: 25 });
   useEffect(() => {
-    setV({ companyName: settings.companyName, companyAddress: settings.companyAddress, companyVatNumber: settings.companyVatNumber, includeLineVat: settings.includeLineVat, showExcl: settings.showLandedCostExclVat, employeesViewAll: settings.employeesViewAll, maxUploadMb: settings.maxUploadMb });
+    setV({ companyName: settings.companyName, companyAddress: settings.companyAddress, companyVatNumber: settings.companyVatNumber, includeLineVat: settings.includeLineVat, employeesViewAll: settings.employeesViewAll, maxUploadMb: settings.maxUploadMb });
   }, [settings]);
   const save = useMutation({
     mutationFn: async () => {
       await settingsService.upsert('company_name', v.companyName.trim());
       await settingsService.upsert('company_address', v.companyAddress.trim());
       await settingsService.upsert('company_vat_number', v.companyVatNumber.trim());
-      await settingsService.upsert('include_line_vat_in_landed_cost', v.includeLineVat);
-      await settingsService.upsert('show_landed_cost_excl_vat', v.showExcl);
+      await settingsService.upsert('include_line_vat_in_expenses', v.includeLineVat);
       await settingsService.upsert('employees_view_all_shipments', v.employeesViewAll);
       await settingsService.upsert('max_upload_mb', Math.max(1, Math.min(100, Math.round(v.maxUploadMb))));
     },
@@ -359,11 +358,8 @@ function AppTab() {
         </div>
         <div className="space-y-4">
           <div className="rounded-lg border border-line p-4 dark:border-navy-700">
-            <Checkbox label="Add service-invoice VAT to landed cost" checked={v.includeLineVat} onChange={(e) => setV({ ...v, includeLineVat: e.target.checked })} />
+            <Checkbox label="Add service-invoice VAT to total expenses" checked={v.includeLineVat} onChange={(e) => setV({ ...v, includeLineVat: e.target.checked })} />
             <p className="mt-1 pl-6 text-xs text-slate-500">Off (recommended): the VAT amount typed on freight/clearance invoices is reported separately. Import VAT paid at customs is always its own category and always included. VAT is never counted twice.</p>
-          </div>
-          <div className="rounded-lg border border-line p-4 dark:border-navy-700">
-            <Checkbox label="Show landed cost excluding recoverable VAT" checked={v.showExcl} onChange={(e) => setV({ ...v, showExcl: e.target.checked })} />
           </div>
           <div className="rounded-lg border border-line p-4 dark:border-navy-700">
             <Checkbox label="Employees can view all shipments" checked={v.employeesViewAll} onChange={(e) => setV({ ...v, employeesViewAll: e.target.checked })} />

@@ -1,11 +1,16 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, CreditCard, MoreHorizontal, Pencil, Trash2, XCircle, RotateCcw } from 'lucide-react';
+import { CheckCircle2, CreditCard, Loader2, MoreHorizontal, Paperclip, Pencil, Trash2, XCircle, RotateCcw } from 'lucide-react';
 import { ConfirmDialog, DataTable, Dropdown, PaymentStatusPill, ReviewStatusPill, DemoBadge, useToast, type Column } from '@/components/ui';
 import { expensesService } from '@/services/expenses';
-import { qk, useShipments } from '@/hooks/queries';
-import { usePermissions } from '@/hooks/useAuth';
+import { qk, useDocuments, useSettings, useShipments } from '@/hooks/queries';
+import { documentsService } from '@/services/documents';
+import { googleDrive } from '@/services/googleDrive';
+import { ALLOWED_UPLOAD_EXT } from '@/lib/constants';
+import { errorMessage } from '@/lib/errors';
+import { defaultDocType } from './ExpenseFormModal';
+import { useAuth, usePermissions } from '@/hooks/useAuth';
 import { fmtAmount, fmtDate, fmtRate } from '@/lib/format';
 import { sumMoney } from '@/lib/calculations';
 import type { ExpenseWithRefs } from '@/types/database';
@@ -20,6 +25,35 @@ export function ExpensesTable({ rows, showShipment = true, empty, showFooter = t
   const [editing, setEditing] = useState<ExpenseWithRefs | null>(null);
   const [paymentsId, setPaymentsId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<ExpenseWithRefs | null>(null);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const documents = useDocuments();
+  const { session } = useAuth();
+  const { settings } = useSettings();
+  const docsFor = (e: ExpenseWithRefs) => (documents.data ?? []).filter((d) => d.expense_id === e.id);
+  const isInvoice = (e: ExpenseWithRefs) => e.category?.cost_group === 'product_invoice';
+
+  const attach = async (e: ExpenseWithRefs, list: FileList | null) => {
+    const files = Array.from(list ?? []);
+    const shp = shipmentOf(e) ?? e.shipment;
+    if (!files.length || !session || !shp) return;
+    const bad = files.filter((f) => !ALLOWED_UPLOAD_EXT.includes((f.name.split('.').pop() ?? '').toLowerCase()) || f.size > settings.maxUploadMb * 1024 * 1024);
+    if (bad.length) { toast.error(`Only PDF, JPG or PNG up to ${settings.maxUploadMb} MB`, bad.map((f) => f.name).join(', ')); return; }
+    setUploadingId(e.id);
+    const failed: string[] = [];
+    for (const f of files) {
+      try {
+        await documentsService.upload({ shipment: shp, file: f, docType: defaultDocType(e.category?.code), expenseId: e.id, userId: session.user.id });
+      } catch (err) {
+        failed.push(`${f.name}: ${errorMessage(err)}`);
+        if (/authori|cancel|popup/i.test(errorMessage(err))) break;
+      }
+    }
+    setUploadingId(null);
+    qc.invalidateQueries({ queryKey: ['documents'] });
+    qc.invalidateQueries({ queryKey: ['shipment'] });
+    if (failed.length) toast.error('Attachment not uploaded', failed.join(' · '));
+    else toast.success(`${files.length} attachment(s) saved to Google Drive`, e.expense_no);
+  };
 
   const shipmentOf = (e: ExpenseWithRefs) => shipments.data?.find((s) => s.id === e.shipment_id);
   const canEdit = (e: ExpenseWithRefs) => perms.canEditShipment(shipmentOf(e));
@@ -120,10 +154,35 @@ export function ExpensesTable({ rows, showShipment = true, empty, showFooter = t
       sortValue: (e) => e.payment_status,
       cell: (e) => (
         <div className="space-y-1">
-          <PaymentStatusPill status={e.payment_status} />
-          {e.payment_date && <p className="text-[11px] text-slate-500">{fmtDate(e.payment_date)}</p>}
+          <PaymentStatusPill status={isInvoice(e) ? 'not_applicable' : e.payment_status} />
+          {!isInvoice(e) && e.payment_date && <p className="text-[11px] text-slate-500">{fmtDate(e.payment_date)}</p>}
         </div>
       ),
+    },
+    {
+      key: 'att',
+      header: 'Attachment',
+      sortValue: (e) => docsFor(e).length,
+      cell: (e) => {
+        const docs = docsFor(e);
+        return (
+          <div className="flex min-w-[120px] flex-col gap-1" onClick={(ev) => ev.stopPropagation()}>
+            {docs.map((d) => (
+              <a key={d.id} href={d.drive_web_link ?? '#'} target="_blank" rel="noreferrer" title={d.original_filename} className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-accent hover:underline">
+                <Paperclip className="h-3 w-3" /> {d.doc_no}
+              </a>
+            ))}
+            {canEdit(e) && googleDrive.isConfigured() && (
+              <label className="inline-flex w-fit cursor-pointer items-center gap-1 rounded border border-dashed border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-500 hover:border-accent hover:text-accent dark:border-navy-600">
+                {uploadingId === e.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Paperclip className="h-3 w-3" />}
+                {uploadingId === e.id ? 'Uploading…' : docs.length ? 'Add' : 'Attach'}
+                <input type="file" multiple className="hidden" accept=".pdf,.jpg,.jpeg,.png" disabled={uploadingId !== null} onChange={(ev) => { attach(e, ev.target.files); ev.target.value = ''; }} />
+              </label>
+            )}
+            {!docs.length && !(canEdit(e) && googleDrive.isConfigured()) && <span className="text-xs text-slate-400">—</span>}
+          </div>
+        );
+      },
     },
     { key: 'review', header: 'Review', hideBelow: 'lg', sortValue: (e) => e.review_status, cell: (e) => <ReviewStatusPill status={e.review_status} /> },
     {
@@ -138,7 +197,7 @@ export function ExpensesTable({ rows, showShipment = true, empty, showFooter = t
             </button>
           }
           items={[
-            { label: 'Payments', icon: <CreditCard className="h-4 w-4" />, onClick: () => setPaymentsId(e.id) },
+            { label: 'Payments', icon: <CreditCard className="h-4 w-4" />, onClick: () => setPaymentsId(e.id), hidden: isInvoice(e) },
             { label: 'Edit', icon: <Pencil className="h-4 w-4" />, onClick: () => setEditing(e), hidden: !canEdit(e) },
             { label: 'Approve', icon: <CheckCircle2 className="h-4 w-4" />, onClick: () => review.mutate({ e, status: 'approved' }), hidden: !perms.canReview || e.review_status === 'approved' },
             { label: 'Reject', icon: <XCircle className="h-4 w-4" />, onClick: () => review.mutate({ e, status: 'rejected' }), hidden: !perms.canReview || e.review_status === 'rejected' },
@@ -165,7 +224,7 @@ export function ExpensesTable({ rows, showShipment = true, empty, showFooter = t
         message={
           <>
             <p>
-              {deleting?.expense_no} — {deleting?.category?.name}, SAR {fmtAmount(deleting?.amount_sar)}. It will be removed from all totals and the landed cost,
+              {deleting?.expense_no} — {deleting?.category?.name}, SAR {fmtAmount(deleting?.amount_sar)}. It will be removed from all totals and percentages,
               but kept in the audit log.
             </p>
             {deleting && Number(deleting.paid_amount) > 0 && <p className="mt-2 font-medium text-red-600">This expense has recorded payments.</p>}

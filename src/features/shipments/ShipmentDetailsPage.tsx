@@ -87,6 +87,7 @@ export default function ShipmentDetailsPage() {
       await generateCostStatement({
         shipment: s,
         expenses: b.expenses.data ?? [],
+        documents: b.documents.data ?? [],
         categories: b.categories.data ?? [],
         includeLineVat: b.settings.includeLineVat,
         companyName: b.settings.companyName,
@@ -183,12 +184,11 @@ export default function ShipmentDetailsPage() {
               </ul>
             </Alert>
           )}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {[
               ['Supplier invoice value', fmtMoney(b.analysis.productInvoiceValue)],
               ['Total expenses', fmtMoney(b.analysis.additionalExpenseTotal)],
               ['Expenses % of supplier invoice', fmtPct(b.analysis.additionalExpensePercentage)],
-              ['Total landed cost', fmtMoney(b.analysis.totalLandedCost)],
             ].map(([l, v]) => (
               <Card key={l} className="p-4">
                 <p className="text-xs text-slate-500">{l}</p>
@@ -196,7 +196,7 @@ export default function ShipmentDetailsPage() {
               </Card>
             ))}
           </div>
-          <CostAnalysisPanel analysis={b.analysis} showExclVat={b.settings.showLandedCostExclVat} />
+          <CostAnalysisPanel analysis={b.analysis} />
           {canEdit && s.workflow_step < 6 && b.analysis.expenseCount > 0 && (
             <Alert tone="blue" title="Step 6 — Review cost distribution">
               <p>Check the table above against the invoices, then confirm the review.</p>

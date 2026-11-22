@@ -55,7 +55,6 @@ export interface AppSettings {
   companyAddress: string;
   companyVatNumber: string;
   includeLineVat: boolean;
-  showLandedCostExclVat: boolean;
   employeesViewAll: boolean;
   driveRootFolderName: string;
   driveRootFolderId: string;
@@ -73,8 +72,7 @@ export function useSettings() {
       companyName: str('company_name', 'DIAMOND DENT TRADING CO.'),
       companyAddress: str('company_address', ''),
       companyVatNumber: str('company_vat_number', ''),
-      includeLineVat: bool('include_line_vat_in_landed_cost', false),
-      showLandedCostExclVat: bool('show_landed_cost_excl_vat', true),
+      includeLineVat: bool('include_line_vat_in_expenses', false),
       employeesViewAll: bool('employees_view_all_shipments', true),
       driveRootFolderName: str('google_drive_root_folder_name', 'Diamond Dent Shipments'),
       driveRootFolderId: str('drive_root_folder_id', ''),

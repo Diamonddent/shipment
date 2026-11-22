@@ -43,12 +43,12 @@ export default function ExpensesPage() {
   }, [expenses.data, q, category, status, shipmentId, supplierId, from, to]);
 
   const totals = useMemo(() => {
-    const out = sumMoney(filtered.filter((e) => e.payment_status !== 'paid').map((e) => outstandingSar(Number(e.original_amount), Number(e.vat_amount), Number(e.paid_amount), Number(e.exchange_rate))));
+    const out = sumMoney(filtered.filter((e) => (e.payment_status === 'unpaid' || e.payment_status === 'partially_paid')).map((e) => outstandingSar(Number(e.original_amount), Number(e.vat_amount), Number(e.paid_amount), Number(e.exchange_rate))));
     return {
       sar: sumMoney(filtered.map((e) => Number(e.amount_sar))),
       vat: sumMoney(filtered.map((e) => Number(e.vat_amount_sar))),
       outstanding: out,
-      unpaid: filtered.filter((e) => e.payment_status !== 'paid').length,
+      unpaid: filtered.filter((e) => (e.payment_status === 'unpaid' || e.payment_status === 'partially_paid')).length,
     };
   }, [filtered]);
 

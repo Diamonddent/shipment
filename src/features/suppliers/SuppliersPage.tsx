@@ -25,12 +25,12 @@ export default function SuppliersPage() {
   const [deleting, setDeleting] = useState<Supplier | null>(null);
 
   const stats = useMemo(() => {
-    const m = new Map<string, { count: number; landed: number; invoice: number }>();
+    const m = new Map<string, { count: number; expenses: number; invoice: number }>();
     for (const s of shipments.data ?? []) {
       if (!s.supplier_id || s.status === 'cancelled') continue;
       const a = analyzeShipmentCost((expenses.data ?? []).filter((e) => e.shipment_id === s.id).map(toCalcExpense), { includeLineVat: settings.includeLineVat });
-      const cur = m.get(s.supplier_id) ?? { count: 0, landed: 0, invoice: 0 };
-      m.set(s.supplier_id, { count: cur.count + 1, landed: sumMoney([cur.landed, a.totalLandedCost]), invoice: sumMoney([cur.invoice, a.productInvoiceValue]) });
+      const cur = m.get(s.supplier_id) ?? { count: 0, expenses: 0, invoice: 0 };
+      m.set(s.supplier_id, { count: cur.count + 1, expenses: sumMoney([cur.expenses, a.additionalExpenseTotal]), invoice: sumMoney([cur.invoice, a.productInvoiceValue]) });
     }
     return m;
   }, [shipments.data, expenses.data, settings.includeLineVat]);
@@ -50,7 +50,7 @@ export default function SuppliersPage() {
 
   const expPct = (id: string) => {
     const st = stats.get(id);
-    return st && st.invoice > 0 ? percentOf(st.landed - st.invoice, st.invoice) : null;
+    return st && st.invoice > 0 ? percentOf(st.expenses, st.invoice) : null;
   };
   const columns: Column<Supplier>[] = [
     { key: 'name', header: 'Supplier', sortValue: (s) => s.name, cell: (s) => <div className="min-w-[200px]"><p className="font-medium text-slate-900 dark:text-white">{s.name} <DemoBadge show={s.is_demo} /></p><p className="text-xs text-slate-500">{[s.city, s.country].filter(Boolean).join(', ') || '—'}</p></div> },
@@ -58,7 +58,7 @@ export default function SuppliersPage() {
     { key: 'terms', header: 'Terms / currency', hideBelow: 'lg', cell: (s) => <div className="text-xs"><p>{s.payment_terms ?? '—'}</p><p className="text-slate-500">{s.default_currency ?? ''}</p></div> },
     { key: 'count', header: 'Shipments', align: 'right', sortValue: (s) => stats.get(s.id)?.count ?? 0, cell: (s) => stats.get(s.id)?.count ?? 0 },
     { key: 'inv', header: 'Invoice value SAR', align: 'right', hideBelow: 'md', sortValue: (s) => stats.get(s.id)?.invoice ?? 0, cell: (s) => fmtAmount(stats.get(s.id)?.invoice ?? 0) },
-    { key: 'landed', header: 'Landed cost SAR', align: 'right', hideBelow: 'md', sortValue: (s) => stats.get(s.id)?.landed ?? 0, cell: (s) => fmtAmount(stats.get(s.id)?.landed ?? 0) },
+    { key: 'expenses', header: 'Total expenses SAR', align: 'right', hideBelow: 'md', sortValue: (s) => stats.get(s.id)?.expenses ?? 0, cell: (s) => fmtAmount(stats.get(s.id)?.expenses ?? 0) },
     { key: 'pct', header: 'Expenses % of invoice', align: 'right', sortValue: (s) => expPct(s.id) ?? -1, cell: (s) => <span className="font-semibold">{fmtPct(expPct(s.id))}</span> },
     { key: 'status', header: 'Status', cell: (s) => <Badge tone={s.is_active ? 'green' : 'slate'}>{s.is_active ? 'Active' : 'Inactive'}</Badge> },
     {

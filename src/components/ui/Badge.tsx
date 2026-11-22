@@ -40,8 +40,9 @@ export function ShipmentStatusPill({ status }: { status: ShipmentStatus }) {
   );
 }
 
-const payTone: Record<PaymentStatus, Tone> = { paid: 'green', partially_paid: 'amber', unpaid: 'red' };
+const payTone: Record<PaymentStatus, Tone> = { paid: 'green', partially_paid: 'amber', unpaid: 'red', not_applicable: 'slate' };
 export function PaymentStatusPill({ status }: { status: PaymentStatus }) {
+  if (status === 'not_applicable') return <span className="text-xs text-slate-400" title="Supplier invoice — no payment status">—</span>;
   return <Badge tone={payTone[status]}>{PAYMENT_STATUS_LABEL[status]}</Badge>;
 }
 
