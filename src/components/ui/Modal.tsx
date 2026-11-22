@@ -1,0 +1,113 @@
+import { useEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { AlertTriangle, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button } from './Button';
+
+export function Modal({
+  open,
+  onClose,
+  title,
+  subtitle,
+  children,
+  footer,
+  size = 'md',
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: ReactNode;
+  subtitle?: ReactNode;
+  children: ReactNode;
+  footer?: ReactNode;
+  size?: 'sm' | 'md' | 'lg' | 'xl';
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+  const widths = { sm: 'max-w-md', md: 'max-w-2xl', lg: 'max-w-4xl', xl: 'max-w-6xl' };
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" onSubmit={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+      <div className="absolute inset-0 bg-navy-950/50 backdrop-blur-[2px]" onClick={onClose} />
+      <div
+        className={cn(
+          'relative flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-pop animate-fadein dark:bg-navy-900 sm:rounded-xl',
+          widths[size],
+        )}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4 dark:border-navy-700">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">{title}</h2>
+            {subtitle && <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>}
+          </div>
+          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-navy-800" aria-label="Close">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="overflow-y-auto px-5 py-4">{children}</div>
+        {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-line px-5 py-3 dark:border-navy-700">{footer}</div>}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+export function ConfirmDialog({
+  open,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  tone = 'danger',
+  loading,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: ReactNode;
+  confirmLabel?: string;
+  tone?: 'danger' | 'primary';
+  loading?: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title}
+      size="sm"
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose} disabled={loading}>
+            Cancel
+          </Button>
+          <Button variant={tone === 'danger' ? 'danger' : 'primary'} onClick={onConfirm} loading={loading}>
+            {confirmLabel}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex gap-3">
+        <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full', tone === 'danger' ? 'bg-red-50 text-red-600' : 'bg-accent-50 text-accent')}>
+          <AlertTriangle className="h-5 w-5" />
+        </div>
+        <div className="text-sm text-slate-600 dark:text-slate-300">
+          {message}
+          {children}
+        </div>
+      </div>
+    </Modal>
+  );
+}
