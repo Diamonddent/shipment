@@ -10,7 +10,7 @@ import { useAuth, usePermissions } from '@/hooks/useAuth';
 import { auditService, categoriesService, currenciesService, settingsService } from '@/services/reference';
 import { usersService, type UserRow } from '@/services/users';
 import { googleDrive, parseDriveFolderId } from '@/services/googleDrive';
-import { ALLOCATION_METHOD_LABELS, COST_GROUPS, COST_GROUP_LABELS, type AllocationMethod, type CostGroup } from '@/lib/calculations';
+import { COST_GROUPS, COST_GROUP_LABELS, type CostGroup } from '@/lib/calculations';
 import { ROLE_LABEL } from '@/lib/constants';
 import { fmtDate, fmtDateTime, fmtRate } from '@/lib/format';
 import { todayISO } from '@/lib/utils';
@@ -168,11 +168,11 @@ function CategoriesTab() {
   const cats = useCategories();
   const [editing, setEditing] = useState<ExpenseCategory | null>(null);
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ name: '', code: '', cost_group: 'other' as CostGroup, default_allocation_method: 'value' as AllocationMethod, is_allocatable: true, is_recoverable_vat: false, sort_order: 200 });
+  const [f, setF] = useState({ name: '', code: '', cost_group: 'other' as CostGroup, is_recoverable_vat: false, sort_order: 200 });
   const openFor = (c: ExpenseCategory | null) => {
     setEditing(c);
-    setF(c ? { name: c.name, code: c.code, cost_group: c.cost_group, default_allocation_method: c.default_allocation_method, is_allocatable: c.is_allocatable, is_recoverable_vat: c.is_recoverable_vat, sort_order: c.sort_order }
-      : { name: '', code: '', cost_group: 'other', default_allocation_method: 'value', is_allocatable: true, is_recoverable_vat: false, sort_order: 200 });
+    setF(c ? { name: c.name, code: c.code, cost_group: c.cost_group, is_recoverable_vat: c.is_recoverable_vat, sort_order: c.sort_order }
+      : { name: '', code: '', cost_group: 'other', is_recoverable_vat: false, sort_order: 200 });
     setOpen(true);
   };
   const save = useMutation({
@@ -196,7 +196,6 @@ function CategoriesTab() {
   const columns: Column<ExpenseCategory>[] = [
     { key: 'name', header: 'Category', sortValue: (c) => c.sort_order, cell: (c) => <div><p className="font-medium text-slate-900 dark:text-white">{c.name}</p><p className="text-xs text-slate-500">{c.code}{c.is_system ? ' · default' : ''}</p></div> },
     { key: 'group', header: 'Reporting group', cell: (c) => COST_GROUP_LABELS[c.cost_group] },
-    { key: 'method', header: 'Default allocation', hideBelow: 'md', cell: (c) => (c.is_allocatable ? ALLOCATION_METHOD_LABELS[c.default_allocation_method] : 'Not allocated (invoice)') },
     { key: 'vat', header: 'Recoverable VAT', hideBelow: 'lg', cell: (c) => (c.is_recoverable_vat ? <Check className="h-4 w-4 text-emerald-500" /> : '—') },
     { key: 'st', header: 'Status', cell: (c) => <Badge tone={c.is_active ? 'green' : 'slate'}>{c.is_active ? 'Active' : 'Inactive'}</Badge> },
     { key: 'a', header: '', align: 'right', cell: (c) => <div className="flex justify-end gap-1"><Button size="sm" variant="ghost" icon={<Pencil className="h-4 w-4" />} onClick={() => openFor(c)}>Edit</Button><Button size="sm" variant="ghost" icon={<Power className="h-4 w-4" />} onClick={() => toggle.mutate(c)}>{c.is_active ? 'Deactivate' : 'Activate'}</Button></div> },
@@ -210,19 +209,13 @@ function CategoriesTab() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Name" required><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
           <Field label="Code" hint={editing ? 'Codes cannot be changed' : 'Generated from the name if empty'}><Input value={f.code} disabled={!!editing} onChange={(e) => setF({ ...f, code: e.target.value })} /></Field>
-          <Field label="Reporting group" hint={editing?.is_system ? 'Fixed for default categories' : 'Used by the dashboard and landed-cost formula'}>
-            <Select value={f.cost_group} disabled={!!editing?.is_system} onChange={(e) => setF({ ...f, cost_group: e.target.value as CostGroup, is_allocatable: e.target.value !== 'product_invoice' })}>
+          <Field label="Reporting group" hint={editing?.is_system ? 'Fixed for default categories' : 'Used by the dashboard and the % of supplier invoice'}>
+            <Select value={f.cost_group} disabled={!!editing?.is_system} onChange={(e) => setF({ ...f, cost_group: e.target.value as CostGroup })}>
               {COST_GROUPS.map((g) => <option key={g} value={g}>{COST_GROUP_LABELS[g]}</option>)}
-            </Select>
-          </Field>
-          <Field label="Default allocation method">
-            <Select value={f.default_allocation_method} onChange={(e) => setF({ ...f, default_allocation_method: e.target.value as AllocationMethod })}>
-              {(Object.keys(ALLOCATION_METHOD_LABELS) as AllocationMethod[]).map((m) => <option key={m} value={m}>{ALLOCATION_METHOD_LABELS[m]}</option>)}
             </Select>
           </Field>
           <Field label="Sort order"><Input type="number" value={f.sort_order} onChange={(e) => setF({ ...f, sort_order: Number(e.target.value) || 0 })} /></Field>
           <div className="space-y-2 pt-5">
-            <Checkbox label="Allocate to products" checked={f.is_allocatable} disabled={f.cost_group === 'product_invoice'} onChange={(e) => setF({ ...f, is_allocatable: e.target.checked })} />
             <Checkbox label="Recoverable input VAT" checked={f.is_recoverable_vat} onChange={(e) => setF({ ...f, is_recoverable_vat: e.target.checked })} />
           </div>
         </div>
@@ -467,7 +460,7 @@ function DemoTab() {
             ))}
           </div>
         )}
-        <Alert tone="amber">Removes only rows flagged as demo (shipments, their expenses, payments, products, allocations, document records, demo suppliers, forwarders and catalogue items). Real company records are never deleted; real shipments that reference a demo supplier are detached from it first.</Alert>
+        <Alert tone="amber">Removes only rows flagged as demo (shipments, their expenses, payments, document records, demo suppliers and forwarders). Real company records are never deleted; real shipments that reference a demo supplier are detached from it first.</Alert>
         <Button variant="danger" icon={<Trash2 className="h-4 w-4" />} disabled={!total} onClick={() => setOpen(true)}>Remove all demo data</Button>
       </CardBody>
       <ConfirmDialog open={open} onClose={() => setOpen(false)} onConfirm={() => typed === 'REMOVE' && remove.mutate()} loading={remove.isPending} title="Remove all demo data?" confirmLabel="Remove demo data"
@@ -484,7 +477,7 @@ function AuditTab() {
   const users = useUsers();
   const logs = useQuery({ queryKey: ['audit', 'all', table], queryFn: () => auditService.list(300, table || undefined) });
   const nameOf = (id: string | null) => (id ? users.data?.find((u) => u.id === id)?.full_name ?? id.slice(0, 8) : 'System');
-  const tables = ['shipments', 'shipment_expenses', 'expense_payments', 'shipment_products', 'expense_allocations', 'shipment_documents', 'expense_categories', 'currencies', 'exchange_rates', 'users_roles', 'application_settings', 'suppliers', 'freight_forwarders', 'profiles', 'demo_data'];
+  const tables = ['shipments', 'shipment_expenses', 'expense_payments', 'shipment_documents', 'expense_categories', 'currencies', 'exchange_rates', 'users_roles', 'application_settings', 'suppliers', 'freight_forwarders', 'profiles', 'demo_data'];
   return (
     <Card>
       <CardHeader title="Audit log" subtitle="Latest 300 changes to financial and configuration records" actions={<Select className="h-8 w-56" value={table} onChange={(e) => setTable(e.target.value)} aria-label="Table"><option value="">All tables</option>{tables.map((t) => <option key={t} value={t}>{t}</option>)}</Select>} />

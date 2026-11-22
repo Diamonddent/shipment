@@ -3,9 +3,9 @@
  * Regenerate with `supabase gen types typescript` if you prefer generated types;
  * these hand-written types are kept deliberately close to the schema.
  */
-import type { AllocationMethod, CostGroup, PaymentStatus, ShipmentStatus } from '@/lib/calculations';
+import type { CostGroup, PaymentStatus, ShipmentStatus } from '@/lib/calculations';
 
-export type { AllocationMethod, CostGroup, PaymentStatus, ShipmentStatus };
+export type { CostGroup, PaymentStatus, ShipmentStatus };
 
 export type Role = 'admin' | 'manager' | 'employee';
 export type ShippingMethod = 'air' | 'sea' | 'land' | 'courier';
@@ -105,34 +105,12 @@ export interface FreightForwarder extends Timestamps {
   created_by: string | null;
 }
 
-export interface Product extends Timestamps {
-  id: string;
-  item_code: string;
-  description: string;
-  manufacturer: string | null;
-  brand: string | null;
-  hs_code: string | null;
-  country_of_origin: string | null;
-  unit_of_measure: string;
-  default_unit_price: number | null;
-  default_currency: string | null;
-  unit_net_weight: number | null;
-  unit_gross_weight: number | null;
-  sfda_registration: string | null;
-  odoo_product_id: number | null;
-  is_active: boolean;
-  is_demo: boolean;
-  created_by: string | null;
-}
-
 export interface ExpenseCategory extends Timestamps {
   id: string;
   name: string;
   code: string;
   cost_group: CostGroup;
-  is_allocatable: boolean;
   is_recoverable_vat: boolean;
-  default_allocation_method: AllocationMethod;
   sort_order: number;
   is_system: boolean;
   is_active: boolean;
@@ -185,33 +163,6 @@ export interface ShipmentWithRefs extends Shipment {
   forwarder: Pick<FreightForwarder, 'id' | 'name'> | null;
 }
 
-export interface ShipmentProduct extends Timestamps {
-  id: string;
-  shipment_id: string;
-  product_id: string | null;
-  item_code: string;
-  description: string;
-  manufacturer: string | null;
-  brand: string | null;
-  hs_code: string | null;
-  country_of_origin: string | null;
-  quantity: number;
-  unit_of_measure: string;
-  unit_price: number;
-  currency_code: string;
-  exchange_rate: number;
-  total_invoice_value: number;
-  invoice_value_sar: number;
-  net_weight: number | null;
-  gross_weight: number | null;
-  volume_cbm: number | null;
-  lot_number: string | null;
-  expiry_date: string | null;
-  sort_order: number;
-  is_demo: boolean;
-  created_by: string | null;
-}
-
 export interface ShipmentExpense extends Timestamps {
   id: string;
   expense_no: string;
@@ -247,7 +198,7 @@ export interface ShipmentExpense extends Timestamps {
 }
 
 export interface ExpenseWithRefs extends ShipmentExpense {
-  category: Pick<ExpenseCategory, 'id' | 'name' | 'code' | 'cost_group' | 'is_recoverable_vat' | 'is_allocatable' | 'default_allocation_method'> | null;
+  category: Pick<ExpenseCategory, 'id' | 'name' | 'code' | 'cost_group' | 'is_recoverable_vat'> | null;
   shipment?: Pick<Shipment, 'id' | 'shipment_code' | 'po_number' | 'status' | 'is_archived' | 'supplier_id'> | null;
 }
 
@@ -262,19 +213,6 @@ export interface ExpensePayment extends Timestamps {
   notes: string | null;
   is_demo: boolean;
   created_by: string | null;
-}
-
-export interface ExpenseAllocation {
-  id: string;
-  shipment_id: string;
-  category_id: string;
-  shipment_product_id: string;
-  method: AllocationMethod;
-  basis_value: number;
-  allocated_amount_sar: number;
-  calculated_at: string;
-  created_by: string | null;
-  is_demo: boolean;
 }
 
 export interface ShipmentDocument extends Timestamps {

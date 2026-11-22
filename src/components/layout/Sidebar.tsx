@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  BarChart3, Boxes, Calculator, ChevronsLeft, ChevronsRight, FileText, FolderOpen, LayoutDashboard, PackagePlus,
+  BarChart3, ChevronsLeft, ChevronsRight, FileText, FolderOpen, LayoutDashboard, PackagePlus,
   Receipt, Settings, Ship, Truck, Building2, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -18,8 +18,6 @@ const groups = [
       { to: '/shipments', label: 'Shipment Register', icon: Ship, end: true },
       { to: '/shipments/new', label: 'New Shipment', icon: PackagePlus },
       { to: '/expenses', label: 'Expenses', icon: Receipt },
-      { to: '/products', label: 'Products', icon: Boxes },
-      { to: '/landed-cost', label: 'Landed Cost', icon: Calculator },
       { to: '/documents', label: 'Documents', icon: FolderOpen },
     ],
   },

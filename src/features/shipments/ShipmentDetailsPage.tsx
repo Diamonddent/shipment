@@ -17,8 +17,6 @@ import { errorMessage } from '@/lib/errors';
 import type { ShipmentStatus } from '@/types/database';
 import { ExpensesTable } from '@/features/expenses/ExpensesTable';
 import { ExpenseFormModal } from '@/features/expenses/ExpenseFormModal';
-import { ShipmentProductsTable } from '@/features/products/ShipmentProductsTable';
-import { LandedCostCalculator } from '@/features/landed-cost/LandedCostCalculator';
 import { DocumentUploader, DocumentsTable, DriveStatus, ZipButton } from '@/features/documents/DocumentsPanel';
 import { generateCostStatement } from '@/features/reports/costStatement';
 import { ShipmentForm } from './ShipmentForm';
@@ -26,7 +24,7 @@ import { useShipmentBundle } from './useShipmentBundle';
 import { WorkflowStepper } from './WorkflowStepper';
 import { CostAnalysisPanel } from './CostAnalysisPanel';
 
-type Tab = 'overview' | 'expenses' | 'products' | 'landed' | 'documents' | 'history';
+type Tab = 'overview' | 'expenses' | 'documents' | 'history';
 
 export default function ShipmentDetailsPage() {
   const { id } = useParams();
@@ -71,7 +69,7 @@ export default function ShipmentDetailsPage() {
       setConfirm(null);
       setStatusOpen(false);
       if (kind === 'duplicate' && res) {
-        toast.success(`Duplicated as ${res.shipment_code}`, 'Header copied; add its own invoice, expenses and products.');
+        toast.success(`Duplicated as ${res.shipment_code}`, 'Header copied; add its own invoice and expenses.');
         navigate(`/shipments/${res.id}`);
       } else if (kind === 'archive') toast.success('Shipment archived');
       else if (kind === 'restore') toast.success('Shipment restored');
@@ -89,9 +87,7 @@ export default function ShipmentDetailsPage() {
       await generateCostStatement({
         shipment: s,
         expenses: b.expenses.data ?? [],
-        products: b.products.data ?? [],
         categories: b.categories.data ?? [],
-        allocations: b.allocations.data ?? [],
         includeLineVat: b.settings.includeLineVat,
         companyName: b.settings.companyName,
         companyAddress: b.settings.companyAddress,
@@ -117,7 +113,6 @@ export default function ShipmentDetailsPage() {
     );
 
   const expenses = b.expenses.data ?? [];
-  const products = b.products.data ?? [];
   const docs = b.documents.data ?? [];
 
   return (
@@ -164,7 +159,7 @@ export default function ShipmentDetailsPage() {
         <WorkflowStepper
           steps={b.workflow.steps}
           current={b.workflow.current}
-          onStepClick={(i) => setTab((['overview', 'overview', 'products', 'expenses', 'documents', 'overview', 'landed', 'overview', 'overview'] as Tab[])[i])}
+          onStepClick={(i) => setTab((['overview', 'expenses', 'expenses', 'documents', 'overview', 'overview', 'overview'] as Tab[])[i])}
         />
       </Card>
 
@@ -174,8 +169,6 @@ export default function ShipmentDetailsPage() {
         tabs={[
           { value: 'overview', label: 'Overview' },
           { value: 'expenses', label: 'Expenses', count: expenses.length },
-          { value: 'products', label: 'Products', count: products.length },
-          { value: 'landed', label: 'Landed Cost' },
           { value: 'documents', label: 'Documents', count: docs.length },
           ...(perms.canViewAudit ? [{ value: 'history' as Tab, label: 'History' }] : []),
         ]}
@@ -192,10 +185,10 @@ export default function ShipmentDetailsPage() {
           )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {[
+              ['Supplier invoice value', fmtMoney(b.analysis.productInvoiceValue)],
+              ['Total expenses', fmtMoney(b.analysis.additionalExpenseTotal)],
+              ['Expenses % of supplier invoice', fmtPct(b.analysis.additionalExpensePercentage)],
               ['Total landed cost', fmtMoney(b.analysis.totalLandedCost)],
-              ['Product invoice', fmtMoney(b.analysis.productInvoiceValue)],
-              ['Additional expenses', fmtMoney(b.analysis.additionalExpenseTotal)],
-              ['Cost increase', fmtPct(b.analysis.costIncreasePercentage)],
             ].map(([l, v]) => (
               <Card key={l} className="p-4">
                 <p className="text-xs text-slate-500">{l}</p>
@@ -254,20 +247,9 @@ export default function ShipmentDetailsPage() {
           <ExpensesTable
             rows={expenses}
             showShipment={false}
-            empty={<EmptyState title="No expenses yet" message="Start with the supplier (product) invoice, then freight, insurance, customs duty, VAT and clearance." action={canEdit && <Button icon={<Plus className="h-4 w-4" />} onClick={() => setAddingExpense(true)}>Add expense</Button>} />}
+            empty={<EmptyState title="No expenses yet" message="Start with the supplier invoice, then freight, insurance, customs duty, VAT and clearance." action={canEdit && <Button icon={<Plus className="h-4 w-4" />} onClick={() => setAddingExpense(true)}>Add expense</Button>} />}
           />
         </Card>
-      )}
-
-      {tab === 'products' && (
-        <Card>
-          <CardHeader title="Products in this shipment" subtitle="Product Invoice Value = Quantity × Unit Price × Exchange Rate" />
-          <ShipmentProductsTable shipment={s} rows={products} canEdit={canEdit} />
-        </Card>
-      )}
-
-      {tab === 'landed' && (
-        <LandedCostCalculator shipment={s} products={products} expenses={expenses} categories={b.categories.data ?? []} saved={b.allocations.data ?? []} canEdit={canEdit} />
       )}
 
       {tab === 'documents' && (
@@ -342,7 +324,7 @@ export default function ShipmentDetailsPage() {
             : confirm === 'restore'
               ? 'The shipment will appear in the register and dashboard again.'
               : confirm === 'duplicate'
-                ? 'A new Draft shipment is created with the same supplier, forwarder, route and currency. Expenses, products and documents are not copied.'
+                ? 'A new Draft shipment is created with the same supplier, forwarder, route and currency. Expenses and documents are not copied.'
                 : b.warnings.length
                   ? `There are ${b.warnings.length} open warning(s) on this shipment. You can still complete it.`
                   : 'All checks passed. The completion date is recorded.'

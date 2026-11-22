@@ -72,11 +72,9 @@ export const COUNTRIES = [
 export const WORKFLOW_STEPS = [
   'Create Shipment',
   'Supplier Invoice',
-  'Add Products',
   'Freight & Expenses',
   'Documents',
   'Review Costs',
-  'Landed Costs',
   'Complete',
   'Export Report',
 ];

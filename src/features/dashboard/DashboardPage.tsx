@@ -7,7 +7,7 @@ import {
   AlertTriangle, CheckCircle2, Clock, Coins, Landmark, Package, Percent, Plane, Plus, Receipt, Scale, Ship, Wallet,
 } from 'lucide-react';
 import { Button, Card, CardHeader, Checkbox, EmptyState, ErrorState, Input, KpiCard, PageHeader, Select, Skeleton } from '@/components/ui';
-import { toCalcExpense, useAllExpenses, useAllShipmentProducts, useSettings, useShipments, useSuppliers } from '@/hooks/queries';
+import { toCalcExpense, useAllExpenses, useSettings, useShipments, useSuppliers } from '@/hooks/queries';
 import { COST_GROUPS, COST_GROUP_LABELS, summarizePortfolio, sumMoney, type ShipmentForSummary } from '@/lib/calculations';
 import { SHIPMENT_STATUSES } from '@/lib/constants';
 import { fmtCompact, fmtMoney, fmtPct, monthKey, monthLabel } from '@/lib/format';
@@ -22,7 +22,6 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const shipments = useShipments();
   const expenses = useAllExpenses();
-  const products = useAllShipmentProducts();
   const suppliers = useSuppliers();
   const { settings } = useSettings();
   const [from, setFrom] = useState('');
@@ -90,17 +89,11 @@ export default function DashboardPage() {
   }, [included, summary]);
 
   const warnings = useMemo(() => {
-    const prodBy = new Map<string, NonNullable<typeof products.data>>();
-    (products.data ?? []).forEach((p) => {
-      const arr = prodBy.get(p.shipment_id) ?? [];
-      arr.push(p);
-      prodBy.set(p.shipment_id, arr);
-    });
     return filtered
-      .map((s) => ({ s, w: shipmentWarnings(s, expBy.get(s.id) ?? [], products.data ? prodBy.get(s.id) ?? [] : null).filter((x) => x.level !== 'info') }))
+      .map((s) => ({ s, w: shipmentWarnings(s, expBy.get(s.id) ?? []).filter((x) => x.level !== 'info') }))
       .filter((x) => x.w.length > 0)
       .sort((a, b) => b.w.filter((x) => x.level === 'error').length - a.w.filter((x) => x.level === 'error').length);
-  }, [filtered, expBy, products.data]);
+  }, [filtered, expBy]);
 
   const loading = shipments.isLoading || expenses.isLoading;
   const error = shipments.error || expenses.error;
@@ -136,19 +129,19 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
       ) : (shipments.data ?? []).length === 0 ? (
         <Card>
-          <EmptyState icon={<Ship className="h-6 w-6" />} title="No shipments yet" message="Create your first shipment to start tracking landed costs. Every figure on this dashboard is calculated from your records." action={<Button icon={<Plus className="h-4 w-4" />} onClick={() => navigate('/shipments/new')}>New shipment</Button>} />
+          <EmptyState icon={<Ship className="h-6 w-6" />} title="No shipments yet" message="Create your first shipment to start tracking expenses against the supplier invoice. Every figure on this dashboard is calculated from your records." action={<Button icon={<Plus className="h-4 w-4" />} onClick={() => navigate('/shipments/new')}>New shipment</Button>} />
         </Card>
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <KpiCard label="Total shipments" value={summary.totalShipments} icon={<Ship className="h-5 w-5" />} />
-            <KpiCard label="Product invoice value" value={fmtMoney(summary.productInvoiceValue)} icon={<Package className="h-5 w-5" />} />
+            <KpiCard label="Supplier invoice value" value={fmtMoney(summary.productInvoiceValue)} icon={<Package className="h-5 w-5" />} />
             <KpiCard label="Freight expenses" value={fmtMoney(summary.freight)} icon={<Plane className="h-5 w-5" />} tone="violet" />
             <KpiCard label="Customs duty" value={fmtMoney(summary.customsDuty)} icon={<Landmark className="h-5 w-5" />} tone="slate" />
             <KpiCard label="Total VAT" value={fmtMoney(summary.vat)} icon={<Receipt className="h-5 w-5" />} tone="slate" hint="Import VAT (recoverable)" />
-            <KpiCard label="Additional expenses" value={fmtMoney(summary.additionalExpenses)} icon={<Coins className="h-5 w-5" />} tone="amber" />
+            <KpiCard label="Total expenses" value={fmtMoney(summary.additionalExpenses)} icon={<Coins className="h-5 w-5" />} tone="amber" />
             <KpiCard label="Total landed cost" value={fmtMoney(summary.totalLandedCost)} icon={<Scale className="h-5 w-5" />} />
-            <KpiCard label="Avg. additional cost %" value={fmtPct(summary.averageAdditionalPct)} icon={<Percent className="h-5 w-5" />} tone="violet" hint={`Weighted: ${fmtPct(summary.weightedAdditionalPct)}`} />
+            <KpiCard label="Expenses % of supplier invoice" value={fmtPct(summary.weightedAdditionalPct)} icon={<Percent className="h-5 w-5" />} tone="violet" hint={`Average per shipment: ${fmtPct(summary.averageAdditionalPct)}`} />
             <KpiCard label="Pending shipments" value={summary.pendingShipments} icon={<Clock className="h-5 w-5" />} tone="amber" />
             <KpiCard label="Shipments completed" value={summary.completedShipments} icon={<CheckCircle2 className="h-5 w-5" />} tone="green" />
             <KpiCard label="Unpaid expenses" value={summary.unpaidExpenseCount} icon={<Wallet className="h-5 w-5" />} tone="red" hint={`Outstanding ${fmtMoney(summary.unpaidExpenseAmount)}`} />
@@ -173,7 +166,7 @@ export default function DashboardPage() {
               </div>
             </Card>
             <Card>
-              <CardHeader title="Monthly shipment expenses" subtitle="Product invoice vs additional expenses, with landed cost trend (by supplier invoice month)" />
+              <CardHeader title="Monthly shipment expenses" subtitle="Supplier invoice vs expenses, with landed cost trend (by supplier invoice month)" />
               <div className="h-72 p-4">
                 {monthly.length === 0 ? <EmptyState title="No data" /> : (
                   <ResponsiveContainer>
@@ -183,8 +176,8 @@ export default function DashboardPage() {
                       <YAxis tickFormatter={fmtCompact} tick={{ fontSize: 11 }} width={50} />
                       <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => fmtMoney(v)} />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar isAnimationActive={false} dataKey="invoice" name="Product invoice" stackId="a" fill="#1E3A8A" radius={[0, 0, 0, 0]} />
-                      <Bar isAnimationActive={false} dataKey="additional" name="Additional expenses" stackId="a" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+                      <Bar isAnimationActive={false} dataKey="invoice" name="Supplier invoice" stackId="a" fill="#1E3A8A" radius={[0, 0, 0, 0]} />
+                      <Bar isAnimationActive={false} dataKey="additional" name="Expenses" stackId="a" fill="#F59E0B" radius={[4, 4, 0, 0]} />
                       <Line isAnimationActive={false} dataKey="landed" name="Landed cost" stroke="#2563EB" strokeWidth={2} dot={{ r: 3 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
@@ -202,8 +195,8 @@ export default function DashboardPage() {
                       <YAxis tickFormatter={fmtCompact} tick={{ fontSize: 11 }} width={50} />
                       <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => fmtMoney(v)} labelFormatter={(_, p) => (p?.[0]?.payload as { full?: string })?.full ?? ''} />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar isAnimationActive={false} dataKey="invoice" name="Product invoice" stackId="a" fill="#1E3A8A" cursor="pointer" />
-                      <Bar isAnimationActive={false} dataKey="additional" name="Additional expenses" stackId="a" fill="#0EA5E9" radius={[4, 4, 0, 0]} cursor="pointer" />
+                      <Bar isAnimationActive={false} dataKey="invoice" name="Supplier invoice" stackId="a" fill="#1E3A8A" cursor="pointer" />
+                      <Bar isAnimationActive={false} dataKey="additional" name="Expenses" stackId="a" fill="#0EA5E9" radius={[4, 4, 0, 0]} cursor="pointer" />
                     </BarChart>
                   </ResponsiveContainer>
                 )}

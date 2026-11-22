@@ -1,21 +1,18 @@
 import { createPdf, pdfFooter, pdfHeader, PDF_PRIMARY } from '@/lib/export';
-import { analyzeShipmentCost, allocateShipment, outstandingSar, sumMoney, toCents, type CategoryToAllocate } from '@/lib/calculations';
-import { fmtAmount, fmtDate, fmtNum, fmtPct, fmtRate } from '@/lib/format';
+import { analyzeShipmentCost, outstandingSar, sumMoney } from '@/lib/calculations';
+import { fmtAmount, fmtDate, fmtPct, fmtRate } from '@/lib/format';
 import { PAYMENT_STATUS_LABEL, SHIPMENT_STATUS_LABEL, SHIPPING_METHOD_LABEL } from '@/lib/constants';
 import { toCalcExpense } from '@/hooks/queries';
-import type { ExpenseAllocation, ExpenseCategory, ExpenseWithRefs, ShipmentProduct, ShipmentWithRefs } from '@/types/database';
+import type { ExpenseCategory, ExpenseWithRefs, ShipmentWithRefs } from '@/types/database';
 
 const right = (cols: number[]) => (d: { column: { index: number }; cell: { styles: { halign: string } } }) => {
   if (cols.includes(d.column.index)) d.cell.styles.halign = 'right';
 };
-const unit = (v: number) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(v);
 
 export interface StatementInput {
   shipment: ShipmentWithRefs;
   expenses: ExpenseWithRefs[];
-  products: ShipmentProduct[];
-  categories: ExpenseCategory[];
-  allocations: ExpenseAllocation[];
+  categories?: ExpenseCategory[];
   includeLineVat: boolean;
   companyName: string;
   companyAddress?: string;
@@ -24,7 +21,7 @@ export interface StatementInput {
 
 /** Detailed shipment cost statement for management review (PDF). */
 export async function generateCostStatement(input: StatementInput): Promise<void> {
-  const { shipment: s, expenses, products, categories, allocations } = input;
+  const { shipment: s, expenses } = input;
   const analysis = analyzeShipmentCost(expenses.map(toCalcExpense), { includeLineVat: input.includeLineVat });
   const { doc, autoTable } = await createPdf('portrait');
   const lastY = () => (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
@@ -66,11 +63,19 @@ export async function generateCostStatement(input: StatementInput): Promise<void
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.text('Expense analysis (SAR)', 36, y);
+  const inv = analysis.productInvoiceValue;
+  const expRows = analysis.byCategory.filter((r) => r.group !== 'product_invoice');
   autoTable(doc, {
     startY: y + 6,
-    head: [['Expense category', 'Amount SAR', '% of landed cost']],
-    body: analysis.byCategory.map((r) => [r.label, fmtAmount(r.amount), fmtPct(r.percentage)]),
-    foot: [['Total landed cost', fmtAmount(analysis.totalLandedCost), '100.00%']],
+    head: [['Expense', 'Amount SAR', '% of supplier invoice']],
+    body: [
+      ['Supplier invoice value (base)', fmtAmount(inv), inv > 0 ? 'base' : '—'],
+      ...expRows.map((r) => [r.label, fmtAmount(r.amount), fmtPct(r.pctOfInvoice)]),
+    ],
+    foot: [
+      ['Total expenses', fmtAmount(analysis.additionalExpenseTotal), fmtPct(analysis.additionalExpensePercentage)],
+      ['Total landed cost', fmtAmount(analysis.totalLandedCost), inv > 0 ? fmtPct(100 + (analysis.additionalExpensePercentage ?? 0)) : '—'],
+    ],
     theme: 'grid',
     margin: { left: 36, right: 36 },
     styles: { fontSize: 8, cellPadding: 4, lineColor: [229, 233, 240], lineWidth: 0.5 },
@@ -81,10 +86,9 @@ export async function generateCostStatement(input: StatementInput): Promise<void
   y = lastY() + 12;
 
   const summary: [string, string][] = [
-    ['Product invoice value', `SAR ${fmtAmount(analysis.productInvoiceValue)}`],
-    ['Additional expense total', `SAR ${fmtAmount(analysis.additionalExpenseTotal)}`],
-    ['Additional expense % (over invoice)', fmtPct(analysis.additionalExpensePercentage)],
-    ['Cost increase %', fmtPct(analysis.costIncreasePercentage)],
+    ['Supplier invoice value', `SAR ${fmtAmount(analysis.productInvoiceValue)}`],
+    ['Total expenses', `SAR ${fmtAmount(analysis.additionalExpenseTotal)}`],
+    ['Expenses % of supplier invoice', fmtPct(analysis.additionalExpensePercentage)],
     ['Total landed cost', `SAR ${fmtAmount(analysis.totalLandedCost)}`],
     ['Landed cost excl. recoverable VAT', `SAR ${fmtAmount(analysis.landedCostExclRecoverableVat)}`],
     [analysis.lineVatIncluded ? 'Service-invoice VAT (included above)' : 'Service-invoice VAT (reported separately)', `SAR ${fmtAmount(analysis.lineVat)}`],
@@ -97,7 +101,7 @@ export async function generateCostStatement(input: StatementInput): Promise<void
     styles: { fontSize: 8.5, cellPadding: 3 },
     columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
     didParseCell: (d) => {
-      if (d.row.index === 4) {
+      if (d.row.index === 2) {
         d.cell.styles.fillColor = [238, 242, 255];
         d.cell.styles.fontStyle = 'bold';
       }
@@ -137,52 +141,6 @@ export async function generateCostStatement(input: StatementInput): Promise<void
   doc.setFontSize(8);
   doc.text(`Outstanding payments: SAR ${fmtAmount(outstanding)}  ·  Expenses: ${active.length}  ·  Unpaid/partial: ${active.filter((e) => e.payment_status !== 'paid').length}`, 36, y + 6);
   y += 20;
-
-  // Product landed cost
-  if (products.length) {
-    const byCat = new Map<string, number>();
-    for (const e of active) {
-      const c = categories.find((x) => x.id === e.category_id);
-      if (c?.is_allocatable) byCat.set(c.id, (byCat.get(c.id) ?? 0) + toCents(Number(e.amount_sar)));
-    }
-    const cats: CategoryToAllocate[] = [...byCat.entries()].map(([id, cents]) => {
-      const c = categories.find((x) => x.id === id)!;
-      return { category_id: id, category_name: c.name, amount_sar: cents / 100, method: allocations.find((a) => a.category_id === id)?.method ?? c.default_allocation_method, manualShares: Object.fromEntries(allocations.filter((a) => a.category_id === id && a.method === 'manual').map((a) => [a.shipment_product_id, Number(a.basis_value)])) };
-    });
-    const res = allocateShipment(products.map((p) => ({ id: p.id, quantity: Number(p.quantity), invoice_value_sar: Number(p.invoice_value_sar), net_weight: p.net_weight, gross_weight: p.gross_weight })), cats);
-    if (y > doc.internal.pageSize.getHeight() - 160) {
-      doc.addPage();
-      y = 48;
-    }
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.text('Product landed cost', 36, y);
-    autoTable(doc, {
-      startY: y + 6,
-      head: [['Item', 'Description', 'Qty', 'Invoice SAR', 'Allocated SAR', 'Landed SAR', 'Per unit SAR']],
-      body: res.products.map((p) => {
-        const src = products.find((x) => x.id === p.id)!;
-        return [src.item_code, src.description, `${fmtNum(p.quantity)} ${src.unit_of_measure}`, fmtAmount(p.invoice_value_sar), fmtAmount(p.allocated_total), fmtAmount(p.landed_cost), unit(p.landed_cost_per_unit)];
-      }),
-      foot: [['Total', '', '', fmtAmount(sumMoney(res.products.map((p) => p.invoice_value_sar))), fmtAmount(res.totalAllocated), fmtAmount(sumMoney(res.products.map((p) => p.landed_cost))), '']],
-      theme: 'grid',
-      margin: { left: 36, right: 36 },
-      styles: { fontSize: 7, cellPadding: 3, lineColor: [229, 233, 240], lineWidth: 0.5 },
-      headStyles: { fillColor: PDF_PRIMARY, textColor: 255 },
-      footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
-      didParseCell: right([2, 3, 4, 5, 6]),
-    });
-    y = lastY() + 8;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.text(
-      `Allocation: ${cats.map((c) => `${c.category_name} by ${c.method.replace('_', ' ')}`).join('; ') || 'none'}.${res.issues.length ? ` Not allocated: ${res.issues.map((i) => i.category_name).join(', ')}.` : ''}`,
-      36,
-      y + 6,
-      { maxWidth: pageW - 72 },
-    );
-    y += 24;
-  }
 
   // Sign-off
   if (y > doc.internal.pageSize.getHeight() - 90) {

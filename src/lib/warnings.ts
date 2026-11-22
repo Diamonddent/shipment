@@ -1,5 +1,4 @@
-import type { ExpenseWithRefs, Shipment, ShipmentProduct } from '@/types/database';
-import { sumMoney, toCents } from './calculations';
+import type { ExpenseWithRefs, Shipment } from '@/types/database';
 import { todayISO } from './utils';
 
 export interface ShipmentWarning {
@@ -15,7 +14,6 @@ const AFTER_CLEARANCE = ['delivered', 'completed'];
 export function shipmentWarnings(
   s: Pick<Shipment, 'status' | 'currency_code' | 'exchange_rate' | 'supplier_invoice_no' | 'supplier_invoice_date' | 'supplier_id' | 'expected_arrival_date' | 'actual_arrival_date'>,
   expenses: ExpenseWithRefs[],
-  products?: ShipmentProduct[] | null,
   documentCount?: number | null,
 ): ShipmentWarning[] {
   if (s.status === 'cancelled') return [];
@@ -26,7 +24,7 @@ export function shipmentWarnings(
   if (!s.supplier_id) w.push({ level: 'warning', code: 'no_supplier', message: 'Supplier is not selected.' });
   if (!s.supplier_invoice_no || !s.supplier_invoice_date)
     w.push({ level: 'warning', code: 'no_supplier_invoice', message: 'Supplier invoice number or date is missing.' });
-  if (pi.length === 0) w.push({ level: 'error', code: 'no_product_invoice', message: 'No Product Invoice expense entered — landed cost is incomplete.' });
+  if (pi.length === 0) w.push({ level: 'error', code: 'no_product_invoice', message: 'No Supplier Invoice expense entered — expense % cannot be calculated.' });
   if (s.currency_code !== 'SAR' && Number(s.exchange_rate) === 1)
     w.push({ level: 'error', code: 'shipment_rate', message: `Exchange rate for ${s.currency_code} looks missing (1.0).` });
 
@@ -36,22 +34,6 @@ export function shipmentWarnings(
   if (noInvoice.length) w.push({ level: 'warning', code: 'expense_invoice', message: `${noInvoice.length} expense(s) have no invoice number.` });
   const zero = active.filter((e) => Number(e.original_amount) === 0);
   if (zero.length) w.push({ level: 'warning', code: 'expense_zero', message: `${zero.length} expense(s) have a zero amount.` });
-
-  if (products) {
-    if (products.length === 0 && s.status !== 'draft') w.push({ level: 'warning', code: 'no_products', message: 'No products added — product landed cost cannot be calculated.' });
-    if (products.length > 0 && pi.length > 0) {
-      const prodTotal = sumMoney(products.map((p) => Number(p.invoice_value_sar)));
-      const piTotal = sumMoney(pi.map((e) => Number(e.amount_sar)));
-      if (Math.abs(toCents(prodTotal) - toCents(piTotal)) > 100)
-        w.push({
-          level: 'warning',
-          code: 'invoice_mismatch',
-          message: `Products total (SAR ${prodTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}) differs from the Product Invoice expense (SAR ${piTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}).`,
-        });
-    }
-    const noWeight = products.filter((p) => !Number(p.gross_weight));
-    if (products.length && noWeight.length) w.push({ level: 'info', code: 'no_weight', message: `${noWeight.length} product(s) have no gross weight (needed for weight allocation).` });
-  }
 
   if (AFTER_ARRIVAL.includes(s.status) && !active.some((e) => e.category?.cost_group === 'freight'))
     w.push({ level: 'warning', code: 'no_freight', message: 'No freight expense entered.' });

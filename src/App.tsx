@@ -14,8 +14,6 @@ const ShipmentsPage = lazy(() => import('@/features/shipments/ShipmentsPage'));
 const NewShipmentWizard = lazy(() => import('@/features/shipments/NewShipmentWizard'));
 const ShipmentDetailsPage = lazy(() => import('@/features/shipments/ShipmentDetailsPage'));
 const ExpensesPage = lazy(() => import('@/features/expenses/ExpensesPage'));
-const ProductsPage = lazy(() => import('@/features/products/ProductsPage'));
-const LandedCostPage = lazy(() => import('@/features/landed-cost/LandedCostPage'));
 const SuppliersPage = lazy(() => import('@/features/suppliers/SuppliersPage'));
 const ForwardersPage = lazy(() => import('@/features/forwarders/ForwardersPage'));
 const ReportsPage = lazy(() => import('@/features/reports/ReportsPage'));
@@ -52,9 +50,6 @@ export default function App() {
           <Route path="shipments/:id" element={<ShipmentDetailsPage />} />
           <Route path="shipments/:id/wizard" element={<NewShipmentWizard />} />
           <Route path="expenses" element={<ExpensesPage />} />
-          <Route path="products" element={<ProductsPage />} />
-          <Route path="landed-cost" element={<LandedCostPage />} />
-          <Route path="landed-cost/:id" element={<LandedCostPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="forwarders" element={<ForwardersPage />} />
           <Route path="reports" element={<ReportsPage />} />

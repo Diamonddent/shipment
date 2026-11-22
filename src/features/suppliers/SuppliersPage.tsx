@@ -6,7 +6,8 @@ import { qk, toCalcExpense, useAllExpenses, useSettings, useShipments, useSuppli
 import { usePermissions } from '@/hooks/useAuth';
 import { suppliersService } from '@/services/masterData';
 import { analyzeShipmentCost, sumMoney } from '@/lib/calculations';
-import { fmtAmount } from '@/lib/format';
+import { fmtAmount, fmtPct } from '@/lib/format';
+import { percentOf } from '@/lib/calculations';
 import type { Supplier } from '@/types/database';
 import { SupplierFormModal } from './SupplierFormModal';
 
@@ -47,13 +48,18 @@ export default function SuppliersPage() {
     onError: (e) => { setDeleting(null); toast.error('Could not delete supplier — it is used by shipments. Deactivate it instead.', e); },
   });
 
+  const expPct = (id: string) => {
+    const st = stats.get(id);
+    return st && st.invoice > 0 ? percentOf(st.landed - st.invoice, st.invoice) : null;
+  };
   const columns: Column<Supplier>[] = [
     { key: 'name', header: 'Supplier', sortValue: (s) => s.name, cell: (s) => <div className="min-w-[200px]"><p className="font-medium text-slate-900 dark:text-white">{s.name} <DemoBadge show={s.is_demo} /></p><p className="text-xs text-slate-500">{[s.city, s.country].filter(Boolean).join(', ') || '—'}</p></div> },
     { key: 'contact', header: 'Contact', hideBelow: 'md', cell: (s) => <div className="text-xs"><p>{s.contact_person ?? '—'}</p><p className="text-slate-500">{s.email ?? ''} {s.phone ?? ''}</p></div> },
     { key: 'terms', header: 'Terms / currency', hideBelow: 'lg', cell: (s) => <div className="text-xs"><p>{s.payment_terms ?? '—'}</p><p className="text-slate-500">{s.default_currency ?? ''}</p></div> },
     { key: 'count', header: 'Shipments', align: 'right', sortValue: (s) => stats.get(s.id)?.count ?? 0, cell: (s) => stats.get(s.id)?.count ?? 0 },
     { key: 'inv', header: 'Invoice value SAR', align: 'right', hideBelow: 'md', sortValue: (s) => stats.get(s.id)?.invoice ?? 0, cell: (s) => fmtAmount(stats.get(s.id)?.invoice ?? 0) },
-    { key: 'landed', header: 'Landed cost SAR', align: 'right', sortValue: (s) => stats.get(s.id)?.landed ?? 0, cell: (s) => <span className="font-semibold">{fmtAmount(stats.get(s.id)?.landed ?? 0)}</span> },
+    { key: 'landed', header: 'Landed cost SAR', align: 'right', hideBelow: 'md', sortValue: (s) => stats.get(s.id)?.landed ?? 0, cell: (s) => fmtAmount(stats.get(s.id)?.landed ?? 0) },
+    { key: 'pct', header: 'Expenses % of invoice', align: 'right', sortValue: (s) => expPct(s.id) ?? -1, cell: (s) => <span className="font-semibold">{fmtPct(expPct(s.id))}</span> },
     { key: 'status', header: 'Status', cell: (s) => <Badge tone={s.is_active ? 'green' : 'slate'}>{s.is_active ? 'Active' : 'Inactive'}</Badge> },
     {
       key: 'a', header: '', align: 'right',

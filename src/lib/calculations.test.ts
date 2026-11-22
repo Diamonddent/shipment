@@ -1,20 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
-  allocateAmount,
-  allocateShipment,
   analyzeShipmentCost,
   derivePaymentStatus,
   expensePayable,
   largestRemainder,
   outstandingSar,
   percentOf,
-  productInvoiceValueSar,
   reconciledPercentages,
   round2,
   sumMoney,
   summarizePortfolio,
   toSar,
-  AllocationError,
   type ExpenseForCalc,
   type ShipmentForSummary,
 } from './calculations';
@@ -48,10 +44,6 @@ describe('rounding & conversion', () => {
     expect(toSar(100.01, 3.75)).toBe(375.04);
     expect(toSar(32000, 4.05)).toBe(129600);
     expect(toSar(123.45, 0.52)).toBe(64.19);
-  });
-  it('Product Invoice Value = Qty × Unit Price × Rate', () => {
-    expect(productInvoiceValueSar(200, 85, 4.05)).toBe(68850);
-    expect(productInvoiceValueSar(3, 9.99, 3.75)).toBe(112.39);
   });
   it('sums money without float drift', () => {
     expect(sumMoney([0.1, 0.2, 0.3])).toBe(0.6);
@@ -124,124 +116,19 @@ describe('VAT is never double counted', () => {
   });
 });
 
-describe('allocation', () => {
-  it('spec example: 15,000 by value 10k/20k/30k => 2,500 / 5,000 / 7,500', () => {
-    expect(allocateAmount(15000, [10000, 20000, 30000])).toEqual([2500, 5000, 7500]);
+describe('expenses as % of supplier invoice', () => {
+  it('each cost line and the total are expressed against the supplier invoice', () => {
+    const a = analyzeShipmentCost(specExample);
+    const row = (k: string) => a.groupRows.find((r) => r.key === k)!;
+    expect(row('freight').pctOfInvoice).toBe(8.89);
+    expect(row('customs_duty').pctOfInvoice).toBe(5.56);
+    expect(row('product_invoice').pctOfInvoice).toBe(100);
+    expect(a.additionalExpenseTotal).toBe(30000);
+    expect(a.additionalExpensePercentage).toBe(33.33);
   });
-
-  it('largest-remainder reconciles awkward splits to the halala', () => {
-    const parts = allocateAmount(100, [1, 1, 1]);
-    expect(parts).toEqual([33.34, 33.33, 33.33]);
-    expect(sumMoney(parts)).toBe(100);
-
-    const odd = allocateAmount(1234.57, [3, 7, 11, 13, 17]);
-    expect(sumMoney(odd)).toBe(1234.57);
-    odd.forEach((v) => expect(round2(v)).toBe(v));
-
-    const tiny = allocateAmount(0.05, [1, 1, 1, 1, 1, 1, 1]);
-    expect(sumMoney(tiny)).toBe(0.05);
-    expect(tiny.filter((x) => x === 0.01)).toHaveLength(5);
-  });
-
-  it('random awkward splits always sum exactly', () => {
-    let seed = 42;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    for (let t = 0; t < 200; t++) {
-      const amount = round2(rnd() * 100000);
-      const weights = Array.from({ length: 1 + Math.floor(rnd() * 12) }, () => round2(rnd() * 5000));
-      if (weights.every((w) => w === 0)) continue;
-      expect(sumMoney(allocateAmount(amount, weights))).toBe(amount);
-    }
-  });
-
-  it('zero weights receive nothing; all-zero basis raises ZERO_BASIS', () => {
-    expect(allocateAmount(90, [0, 1, 2])).toEqual([0, 30, 60]);
-    expect(() => largestRemainder(100, [0, 0])).toThrow(AllocationError);
-    try {
-      allocateAmount(10, [0, 0, 0]);
-    } catch (e) {
-      expect((e as AllocationError).code).toBe('ZERO_BASIS');
-    }
-  });
-
-  const products = [
-    { id: 'A', quantity: 100, invoice_value_sar: 10000, net_weight: 50, gross_weight: 60 },
-    { id: 'B', quantity: 50, invoice_value_sar: 20000, net_weight: 0, gross_weight: 0 },
-    { id: 'C', quantity: 25, invoice_value_sar: 30000, net_weight: 150, gross_weight: 180 },
-  ];
-
-  it('allocates different methods per category and computes landed cost per product and per unit', () => {
-    const r = allocateShipment(products, [
-      { category_id: 'freight', category_name: 'Freight', amount_sar: 2400, method: 'gross_weight' },
-      { category_id: 'duty', category_name: 'Customs Duty', amount_sar: 15000, method: 'value' },
-      { category_id: 'handling', category_name: 'Handling', amount_sar: 350, method: 'quantity' },
-    ]);
-    expect(r.issues).toEqual([]);
-    expect(r.reconciled).toBe(true);
-    expect(r.totalAllocated).toBe(17750);
-    const A = r.products.find((p) => p.id === 'A')!;
-    const B = r.products.find((p) => p.id === 'B')!;
-    const C = r.products.find((p) => p.id === 'C')!;
-    // freight by gross weight 60/0/180 => 600 / 0 / 1800
-    expect(A.allocated_by_category.freight).toBe(600);
-    expect(B.allocated_by_category.freight).toBe(0);
-    expect(C.allocated_by_category.freight).toBe(1800);
-    // duty by value => 2500 / 5000 / 7500
-    expect(A.allocated_by_category.duty).toBe(2500);
-    expect(C.allocated_by_category.duty).toBe(7500);
-    // handling by quantity 100/50/25 of 350 => 200 / 100 / 50
-    expect(B.allocated_by_category.handling).toBe(100);
-    expect(A.landed_cost).toBe(10000 + 600 + 2500 + 200);
-    expect(A.landed_cost_per_unit).toBe(133);
-    expect(C.landed_cost_per_unit).toBe(round2((30000 + 1800 + 7500 + 50) / 25));
-    expect(sumMoney(r.products.map((p) => p.landed_cost))).toBe(60000 + 17750);
-  });
-
-  it('reports zero net-weight basis as an issue instead of silently mis-allocating', () => {
-    const r = allocateShipment(
-      products.map((p) => ({ ...p, net_weight: 0 })),
-      [
-        { category_id: 'freight', category_name: 'Freight', amount_sar: 1000, method: 'net_weight' },
-        { category_id: 'duty', category_name: 'Customs Duty', amount_sar: 600, method: 'value' },
-      ],
-    );
-    expect(r.issues).toHaveLength(1);
-    expect(r.issues[0].code).toBe('ZERO_BASIS');
-    expect(r.reconciled).toBe(false);
-    expect(r.totalAllocated).toBe(600);
-    expect(r.totalToAllocate).toBe(1600);
-  });
-
-  it('manual allocation requires shares totalling 100% and reconciles rounding', () => {
-    const bad = allocateShipment(products, [
-      { category_id: 'x', category_name: 'Other', amount_sar: 100, method: 'manual', manualShares: { A: 50, B: 30 } },
-    ]);
-    expect(bad.issues[0].code).toBe('MANUAL_NOT_100');
-    const ok = allocateShipment(products, [
-      { category_id: 'x', category_name: 'Other', amount_sar: 100, method: 'manual', manualShares: { A: 33.33, B: 33.33, C: 33.34 } },
-    ]);
-    expect(ok.reconciled).toBe(true);
-    expect(sumMoney(ok.rows.map((r) => r.allocated_amount_sar))).toBe(100);
-  });
-
-  it('awkward category totals across awkward bases still reconcile per category', () => {
-    const r = allocateShipment(
-      [
-        { id: 'p1', quantity: 7, invoice_value_sar: 333.33 },
-        { id: 'p2', quantity: 11, invoice_value_sar: 666.67 },
-        { id: 'p3', quantity: 13, invoice_value_sar: 1000.01 },
-      ],
-      [
-        { category_id: 'a', category_name: 'A', amount_sar: 101.01, method: 'quantity' },
-        { category_id: 'b', category_name: 'B', amount_sar: 0.02, method: 'value' },
-        { category_id: 'c', category_name: 'C', amount_sar: 9999.99, method: 'value' },
-      ],
-    );
-    for (const cat of ['a', 'b', 'c']) {
-      const s = sumMoney(r.rows.filter((x) => x.category_id === cat).map((x) => x.allocated_amount_sar));
-      expect(s).toBe({ a: 101.01, b: 0.02, c: 9999.99 }[cat]);
-    }
-    expect(r.reconciled).toBe(true);
+  it('largestRemainder reconciles to the exact total', () => {
+    expect(largestRemainder(10000, [1, 1, 1]).reduce((x, y) => x + y, 0)).toBe(10000);
+    expect(largestRemainder(100, [0, 0])).toEqual([0, 0]);
   });
 });
 

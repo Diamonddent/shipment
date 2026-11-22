@@ -22,10 +22,10 @@ export function AuthShell({ children }: { children: ReactNode }) {
           <div>
             <h1 className="max-w-md text-4xl font-semibold leading-tight">{APP_TITLE}</h1>
             <p className="mt-4 max-w-md text-slate-300">
-              Track every import cost — supplier invoices, freight, customs duty, VAT and clearance — and know the true landed cost of every shipment and product.
+              Track every import cost — supplier invoices, freight, customs duty, VAT and clearance — and see every expense as a % of the supplier invoice.
             </p>
             <div className="mt-8 grid max-w-md grid-cols-3 gap-3 text-center">
-              {['Landed cost', 'Per-unit cost', 'Audit trail'].map((t) => (
+              {['Expense % of invoice', 'Landed cost', 'Audit trail'].map((t) => (
                 <div key={t} className="rounded-xl bg-white/5 px-3 py-4 text-xs text-slate-200 ring-1 ring-white/10">
                   {t}
                 </div>

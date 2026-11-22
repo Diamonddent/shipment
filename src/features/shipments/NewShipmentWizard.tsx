@@ -11,8 +11,6 @@ import { fmtMoney, fmtPct } from '@/lib/format';
 import { errorMessage } from '@/lib/errors';
 import { ExpenseFormModal } from '@/features/expenses/ExpenseFormModal';
 import { ExpensesTable } from '@/features/expenses/ExpensesTable';
-import { ShipmentProductsTable } from '@/features/products/ShipmentProductsTable';
-import { LandedCostCalculator } from '@/features/landed-cost/LandedCostCalculator';
 import { DocumentUploader, DocumentsTable, DriveStatus } from '@/features/documents/DocumentsPanel';
 import { generateCostStatement } from '@/features/reports/costStatement';
 import { ShipmentForm } from './ShipmentForm';
@@ -22,12 +20,10 @@ import { CostAnalysisPanel } from './CostAnalysisPanel';
 
 const DESCRIPTIONS = [
   'Register the shipment header: PO, supplier, currency and logistics details.',
-  'Enter the supplier (product) invoice as the “Product Invoice” expense.',
-  'Add each product line from the invoice / packing list.',
+  'Enter the supplier invoice total as the “Supplier Invoice” expense. Every other cost is measured as a % of this value.',
   'Add freight, insurance, customs duty, VAT, clearance and other charges.',
   'Upload supporting documents to Google Drive.',
-  'Check the cost distribution and confirm it has been reviewed.',
-  'Allocate expenses to products and save the landed cost.',
+  'Check each expense as a % of the supplier invoice and confirm it has been reviewed.',
   'Mark the shipment as completed.',
   'Export the shipment cost statement for management.',
 ];
@@ -36,13 +32,13 @@ export default function NewShipmentWizard() {
   const { id } = useParams();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const step = id ? Math.min(9, Math.max(2, Number(params.get('step')) || 2)) : 1;
+  const step = id ? Math.min(7, Math.max(2, Number(params.get('step')) || 2)) : 1;
   const go = (n: number) => (n === 1 ? navigate(`/shipments/${id}`) : setParams({ step: String(n) }));
 
   if (!id) {
     return (
       <div>
-        <PageHeader title="New shipment" subtitle="Step 1 of 9 — Create shipment" />
+        <PageHeader title="New shipment" subtitle="Step 1 of 7 — Create shipment" />
         <Card className="mb-5 px-3 py-2">
           <WorkflowStepper steps={WORKFLOW_STEPS.map((label) => ({ label, done: false }))} current={0} />
         </Card>
@@ -91,9 +87,7 @@ function WizardSteps({ id, step, go }: { id: string; step: number; go: (n: numbe
       await generateCostStatement({
         shipment: s,
         expenses,
-        products: b.products.data ?? [],
         categories: b.categories.data ?? [],
-        allocations: b.allocations.data ?? [],
         includeLineVat: b.settings.includeLineVat,
         companyName: b.settings.companyName,
         companyAddress: b.settings.companyAddress,
@@ -116,7 +110,7 @@ function WizardSteps({ id, step, go }: { id: string; step: number; go: (n: numbe
           <ArrowLeft className="h-4 w-4" /> {s.shipment_code} details
         </Link>
       </div>
-      <PageHeader title={`${s.shipment_code} · guided workflow`} subtitle={`Step ${step} of 9 — ${WORKFLOW_STEPS[step - 1]}`} />
+      <PageHeader title={`${s.shipment_code} · guided workflow`} subtitle={`Step ${step} of 7 — ${WORKFLOW_STEPS[step - 1]}`} />
       <Card className="mb-5 px-3 py-2">
         <WorkflowStepper steps={b.workflow.steps} current={step - 1} onStepClick={(i) => go(i + 1)} />
       </Card>
@@ -124,7 +118,7 @@ function WizardSteps({ id, step, go }: { id: string; step: number; go: (n: numbe
 
       <Card>
         <CardHeader title={`${step}. ${WORKFLOW_STEPS[step - 1]}`} subtitle={DESCRIPTIONS[step - 1]} />
-        <div className={step === 7 || step === 6 ? 'p-5' : ''}>
+        <div className={step === 5 ? 'p-5' : ''}>
           {step === 2 && (
             <div>
               {invoiceLines.length > 0 ? (
@@ -132,7 +126,7 @@ function WizardSteps({ id, step, go }: { id: string; step: number; go: (n: numbe
               ) : (
                 <EmptyState
                   title="No supplier invoice yet"
-                  message={`Supplier invoice ${s.supplier_invoice_no ?? ''} in ${s.currency_code} — enter its total as the Product Invoice expense.`}
+                  message={`Supplier invoice ${s.supplier_invoice_no ?? ''} in ${s.currency_code} — enter its total as the Supplier Invoice expense.`}
                   action={canEdit && <Button icon={<Plus className="h-4 w-4" />} onClick={() => setExpenseModal('invoice')}>Enter supplier invoice</Button>}
                 />
               )}
@@ -141,21 +135,20 @@ function WizardSteps({ id, step, go }: { id: string; step: number; go: (n: numbe
               )}
             </div>
           )}
-          {step === 3 && <ShipmentProductsTable shipment={s} rows={b.products.data ?? []} canEdit={canEdit} />}
-          {step === 4 && (
+          {step === 3 && (
             <div>
               {canEdit && <div className="flex justify-end border-b border-line p-4 dark:border-navy-700"><Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => setExpenseModal('other')}>Add expense</Button></div>}
               <ExpensesTable rows={otherLines} showShipment={false} empty={<EmptyState title="No freight or other expenses yet" message="Add freight, insurance, customs duty, import VAT, clearance, SABER/SFDA, transport, handling…" />} />
             </div>
           )}
-          {step === 5 && (
+          {step === 4 && (
             <div className="space-y-5 p-5">
               <DriveStatus />
               {canEdit && <DocumentUploader shipment={s} expenses={expenses} />}
               <div className="rounded-lg border border-line dark:border-navy-700"><DocumentsTable rows={docs} shipments={[s]} /></div>
             </div>
           )}
-          {step === 6 && (
+          {step === 5 && (
             <div className="space-y-5">
               {b.warnings.length > 0 && (
                 <Alert tone="amber" title="Open warnings">
@@ -174,12 +167,11 @@ function WizardSteps({ id, step, go }: { id: string; step: number; go: (n: numbe
               )}
             </div>
           )}
-          {step === 7 && <LandedCostCalculator shipment={s} products={b.products.data ?? []} expenses={expenses} categories={b.categories.data ?? []} saved={b.allocations.data ?? []} canEdit={canEdit} />}
-          {step === 8 && (
+          {step === 6 && (
             <div className="space-y-4 p-5">
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-lg bg-slate-50 p-4 dark:bg-navy-800"><p className="text-xs text-slate-500">Total landed cost</p><p className="text-lg font-semibold">{fmtMoney(b.analysis.totalLandedCost)}</p></div>
-                <div className="rounded-lg bg-slate-50 p-4 dark:bg-navy-800"><p className="text-xs text-slate-500">Additional expense %</p><p className="text-lg font-semibold">{fmtPct(b.analysis.additionalExpensePercentage)}</p></div>
+                <div className="rounded-lg bg-slate-50 p-4 dark:bg-navy-800"><p className="text-xs text-slate-500">Expenses % of supplier invoice</p><p className="text-lg font-semibold">{fmtPct(b.analysis.additionalExpensePercentage)}</p></div>
                 <div className="rounded-lg bg-slate-50 p-4 dark:bg-navy-800"><p className="text-xs text-slate-500">Unpaid expenses</p><p className="text-lg font-semibold">{expenses.filter((e) => e.payment_status !== 'paid').length}</p></div>
               </div>
               {b.warnings.length > 0 ? (
@@ -201,10 +193,10 @@ function WizardSteps({ id, step, go }: { id: string; step: number; go: (n: numbe
               )}
             </div>
           )}
-          {step === 9 && (
+          {step === 7 && (
             <div className="space-y-4 p-5">
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                The cost statement contains the shipment details, expense analysis with percentages, additional-cost and cost-increase percentages, every expense line, payment status and the product landed costs, with sign-off lines.
+                The cost statement contains the shipment details, each expense as a % of the supplier invoice, the total expense %, every expense line and payment status, with sign-off lines.
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button icon={<FileDown className="h-4 w-4" />} onClick={() => void exportPdf()} loading={exporting}>Export cost statement (PDF)</Button>
@@ -216,7 +208,7 @@ function WizardSteps({ id, step, go }: { id: string; step: number; go: (n: numbe
         </div>
         <div className="flex items-center justify-between border-t border-line px-5 py-3 dark:border-navy-700">
           <Button variant="outline" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => go(step - 1)}>{step === 2 ? 'Shipment details' : 'Back'}</Button>
-          {step < 9 ? (
+          {step < 7 ? (
             <Button onClick={() => go(step + 1)}>Next <ArrowRight className="h-4 w-4" /></Button>
           ) : (
             <Link to={`/shipments/${id}`}><Button>Finish</Button></Link>

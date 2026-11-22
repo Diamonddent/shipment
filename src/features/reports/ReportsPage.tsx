@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { BarChart3, FileDown, FileSpreadsheet, FileText, Sheet } from 'lucide-react';
 import { Button, Card, CardBody, CardHeader, Checkbox, ErrorState, Input, PageHeader, Select, Skeleton, useToast } from '@/components/ui';
 import {
-  useAllAllocations, useAllExpenses, useAllShipmentProducts, useCategories, useForwarders, useSettings, useShipments, useSuppliers,
+  useAllExpenses, useCategories, useForwarders, useSettings, useShipments, useSuppliers,
 } from '@/hooks/queries';
 import { useAuth, usePermissions } from '@/hooks/useAuth';
 import { exportCSV, exportExcel, exportPDF, stamp, type ExportTable } from '@/lib/export';
@@ -19,8 +19,6 @@ export default function ReportsPage() {
   const perms = usePermissions();
   const shipments = useShipments(true);
   const expenses = useAllExpenses();
-  const products = useAllShipmentProducts();
-  const allocations = useAllAllocations();
   const categories = useCategories();
   const suppliers = useSuppliers();
   const forwarders = useForwarders();
@@ -30,7 +28,7 @@ export default function ReportsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [preview, setPreview] = useState<string>(REPORTS[0].id);
 
-  const queries = [shipments, expenses, products, allocations, categories, suppliers, forwarders];
+  const queries = [shipments, expenses, categories, suppliers, forwarders];
   const loading = queries.some((q) => q.isLoading);
   const error = queries.find((q) => q.error)?.error;
 
@@ -39,10 +37,10 @@ export default function ReportsPage() {
       loading || error
         ? null
         : {
-            shipments: shipments.data ?? [], expenses: expenses.data ?? [], products: products.data ?? [], allocations: allocations.data ?? [],
+            shipments: shipments.data ?? [], expenses: expenses.data ?? [],
             categories: categories.data ?? [], suppliers: suppliers.data ?? [], forwarders: forwarders.data ?? [], includeLineVat: settings.includeLineVat,
           },
-    [loading, error, shipments.data, expenses.data, products.data, allocations.data, categories.data, suppliers.data, forwarders.data, settings.includeLineVat],
+    [loading, error, shipments.data, expenses.data, categories.data, suppliers.data, forwarders.data, settings.includeLineVat],
   );
   const ctx = useMemo(() => (data ? buildContext(data, filters) : null), [data, filters]);
 
@@ -71,9 +69,7 @@ export default function ReportsPage() {
       await generateCostStatement({
         shipment: s,
         expenses: data.expenses.filter((e) => e.shipment_id === s.id),
-        products: data.products.filter((p) => p.shipment_id === s.id),
         categories: data.categories,
-        allocations: data.allocations.filter((a) => a.shipment_id === s.id),
         includeLineVat: settings.includeLineVat,
         companyName: settings.companyName,
         companyAddress: settings.companyAddress,
@@ -117,7 +113,7 @@ export default function ReportsPage() {
             <CardBody className="flex flex-wrap items-end gap-4">
               <div className="min-w-[240px] flex-1">
                 <p className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white"><FileText className="h-4 w-4 text-accent" /> Shipment Cost Statement (management review)</p>
-                <p className="mt-0.5 text-xs text-slate-500">Company header, shipment details, expense analysis with percentages, payment status, product landed cost and sign-off lines.</p>
+                <p className="mt-0.5 text-xs text-slate-500">Company header, shipment details, each expense as % of supplier invoice, payment status and sign-off lines.</p>
               </div>
               <Select className="w-72" value={stmtShipment} onChange={(e) => setStmtShipment(e.target.value)} aria-label="Shipment for statement">
                 <option value="">Select shipment…</option>

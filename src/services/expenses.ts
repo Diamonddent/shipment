@@ -3,7 +3,7 @@ import type { ExpensePayment, ExpenseWithRefs, ShipmentExpense } from '@/types/d
 import { fetchAll, unwrap } from './base';
 
 export const EXPENSE_SELECT =
-  '*, category:expense_categories(id,name,code,cost_group,is_recoverable_vat,is_allocatable,default_allocation_method), shipment:shipments(id,shipment_code,po_number,status,is_archived,supplier_id)';
+  '*, category:expense_categories(id,name,code,cost_group,is_recoverable_vat), shipment:shipments(id,shipment_code,po_number,status,is_archived,supplier_id)';
 
 export type ExpenseInput = Partial<
   Omit<

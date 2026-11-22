@@ -41,7 +41,7 @@ export const settingsService = {
   },
   removeDemoData: async () => unwrap(await supabase.rpc('remove_demo_data')) as Record<string, number>,
   demoCounts: async () => {
-    const tables = ['shipments', 'suppliers', 'freight_forwarders', 'products', 'shipment_expenses'] as const;
+    const tables = ['shipments', 'suppliers', 'freight_forwarders', 'shipment_expenses'] as const;
     const res = await Promise.all(
       tables.map((t) => supabase.from(t).select('id', { count: 'exact', head: true }).eq('is_demo', true)),
     );

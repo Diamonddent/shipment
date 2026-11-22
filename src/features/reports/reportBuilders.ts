@@ -3,8 +3,8 @@
  * the tested calculations in src/lib/calculations.ts.
  */
 import {
-  COST_GROUPS, COST_GROUP_LABELS, allocateShipment, analyzeShipmentCost, outstandingSar, percentOf, sumMoney, toCents,
-  type ShipmentCostAnalysis, type CategoryToAllocate,
+  COST_GROUPS, COST_GROUP_LABELS, analyzeShipmentCost, outstandingSar, percentOf, sumMoney,
+  type ShipmentCostAnalysis,
 } from '@/lib/calculations';
 import { PAYMENT_STATUS_LABEL, SHIPMENT_STATUS_LABEL, SHIPPING_METHOD_LABEL } from '@/lib/constants';
 import type { ExportColumn, ExportTable } from '@/lib/export';
@@ -12,14 +12,12 @@ import { toCalcExpense } from '@/hooks/queries';
 import { inRange, todayISO } from '@/lib/utils';
 import { monthKey, monthLabel } from '@/lib/format';
 import type {
-  ExpenseAllocation, ExpenseCategory, ExpenseWithRefs, FreightForwarder, ShipmentProduct, ShipmentWithRefs, Supplier,
+  ExpenseCategory, ExpenseWithRefs, FreightForwarder, ShipmentWithRefs, Supplier,
 } from '@/types/database';
 
 export interface ReportData {
   shipments: ShipmentWithRefs[];
   expenses: ExpenseWithRefs[];
-  products: ShipmentProduct[];
-  allocations: ExpenseAllocation[];
   categories: ExpenseCategory[];
   suppliers: Supplier[];
   forwarders: FreightForwarder[];
@@ -106,7 +104,7 @@ export const REPORTS: ReportDef[] = [
   {
     id: 'shipment-summary',
     title: 'Shipment Summary Report',
-    description: 'One line per shipment: supplier, route, status, invoice value, additional costs, landed cost and outstanding payments.',
+    description: 'One line per shipment: supplier, route, status, supplier invoice value, expenses, expense % of invoice, landed cost and outstanding payments.',
     orientation: 'landscape',
     build: (ctx) => {
       const rows = ctx.shipments.map((s) => {
@@ -124,7 +122,7 @@ export const REPORTS: ReportDef[] = [
         columns: [
           { header: 'Shipment ID', key: 'code' }, { header: 'PO', key: 'po' }, { header: 'Supplier', key: 'supplier', width: 28 }, { header: 'Origin', key: 'country' },
           { header: 'Method', key: 'method' }, { header: 'Status', key: 'status' }, { header: 'Invoice date', key: 'date', format: 'date' },
-          money('Product invoice SAR', 'invoice'), money('Additional SAR', 'additional'), money('Landed cost SAR', 'landed'), pct('Additional %', 'addPct'), money('Outstanding SAR', 'outstanding'),
+          money('Supplier invoice SAR', 'invoice'), money('Expenses SAR', 'additional'), money('Landed cost SAR', 'landed'), pct('Expenses % of invoice', 'addPct'), money('Outstanding SAR', 'outstanding'),
         ],
         rows,
         totals: { code: 'TOTAL', ...totalsOf(rows, ['invoice', 'additional', 'landed', 'outstanding']) },
@@ -159,32 +157,34 @@ export const REPORTS: ReportDef[] = [
   },
   {
     id: 'expense-percentage',
-    title: 'Expense Percentage Report',
-    description: 'Each expense category and cost group as a percentage of total landed cost, plus additional cost % over invoice value.',
+    title: 'Expense % of Supplier Invoice',
+    description: 'Each expense category and cost group as a percentage of the supplier invoice value, with the total expense %.',
     orientation: 'portrait',
     build: (ctx) => {
       const all = analyzeShipmentCost(ctx.shipments.flatMap((s) => ctx.expensesOf(s.id)).map(toCalcExpense), { includeLineVat: ctx.data.includeLineVat });
+      const exp = (rows: typeof all.byCategory) => rows.filter((r) => r.group !== 'product_invoice').map((r) => ({ label: r.label, amount: r.amount, pctInv: r.pctOfInvoice ?? '' }));
+      const totals = { label: 'Total expenses', amount: all.additionalExpenseTotal, pctInv: all.additionalExpensePercentage ?? '' };
       return [
         {
           name: 'By category',
-          columns: [{ header: 'Expense category', key: 'label', width: 30 }, money('Amount SAR', 'amount'), pct('% of landed cost', 'percentage')],
-          rows: all.byCategory.map((r) => ({ label: r.label, amount: r.amount, percentage: r.percentage })),
-          totals: { label: 'Total landed cost', amount: all.totalLandedCost, percentage: all.totalLandedCost ? 100 : 0 },
+          columns: [{ header: 'Expense category', key: 'label', width: 30 }, money('Amount SAR', 'amount'), pct('% of supplier invoice', 'pctInv')],
+          rows: exp(all.byCategory),
+          totals,
         },
         {
           name: 'By cost group',
-          columns: [{ header: 'Cost group', key: 'label', width: 30 }, money('Amount SAR', 'amount'), pct('% of landed cost', 'percentage')],
-          rows: all.groupRows.map((r) => ({ label: r.label, amount: r.amount, percentage: r.percentage })),
-          totals: { label: 'Total', amount: all.totalLandedCost, percentage: all.totalLandedCost ? 100 : 0 },
+          columns: [{ header: 'Cost group', key: 'label', width: 30 }, money('Amount SAR', 'amount'), pct('% of supplier invoice', 'pctInv')],
+          rows: exp(all.groupRows),
+          totals,
         },
         {
           name: 'Key ratios',
           columns: [{ header: 'Measure', key: 'm', width: 40 }, { header: 'Value', key: 'v', width: 20 }],
           rows: [
-            { m: 'Product invoice value (SAR)', v: all.productInvoiceValue.toFixed(2) },
-            { m: 'Additional expense total (SAR)', v: all.additionalExpenseTotal.toFixed(2) },
-            { m: 'Additional expense % over invoice value', v: all.additionalExpensePercentage === null ? '—' : `${all.additionalExpensePercentage.toFixed(2)}%` },
-            { m: 'Cost increase %', v: all.costIncreasePercentage === null ? '—' : `${all.costIncreasePercentage.toFixed(2)}%` },
+            { m: 'Supplier invoice value (SAR)', v: all.productInvoiceValue.toFixed(2) },
+            { m: 'Total expenses (SAR)', v: all.additionalExpenseTotal.toFixed(2) },
+            { m: 'Expenses % of supplier invoice', v: all.additionalExpensePercentage === null ? '—' : `${all.additionalExpensePercentage.toFixed(2)}%` },
+            { m: 'Total landed cost (SAR)', v: all.totalLandedCost.toFixed(2) },
             { m: 'Landed cost excl. recoverable VAT (SAR)', v: all.landedCostExclRecoverableVat.toFixed(2) },
             { m: `Service-invoice VAT (SAR, ${all.lineVatIncluded ? 'included' : 'reported separately'})`, v: all.lineVat.toFixed(2) },
           ],
@@ -195,14 +195,14 @@ export const REPORTS: ReportDef[] = [
   {
     id: 'supplier-wise',
     title: 'Supplier-wise Expense Report',
-    description: 'Invoice value, each cost group, landed cost and additional cost % per supplier.',
+    description: 'Invoice value, each cost group, landed cost and expense % of invoice per supplier.',
     orientation: 'landscape',
     build: (ctx) => {
       const m = aggregate(ctx, (s) => s.supplier?.name ?? 'No supplier');
       const rows = [...m.entries()].map(([k, a]) => ({ name: k, shipments: a.shipments, invoice: a.invoice, ...groupVals(a), landed: a.landed, additional: a.additional, addPct: a.invoice ? percentOf(a.additional, a.invoice) : '' }));
       return [{
         name: 'By supplier',
-        columns: [{ header: 'Supplier', key: 'name', width: 30 }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Product invoice', 'invoice'), ...groupCols(), money('Additional', 'additional'), money('Landed cost', 'landed'), pct('Additional %', 'addPct')],
+        columns: [{ header: 'Supplier', key: 'name', width: 30 }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Supplier invoice', 'invoice'), ...groupCols(), money('Expenses', 'additional'), money('Landed cost', 'landed'), pct('Expenses % of invoice', 'addPct')],
         rows,
         totals: { name: 'TOTAL', ...totalsOf(rows, ['shipments', 'invoice', 'additional', 'landed', ...COST_GROUPS.map((g) => `g_${g}`)]) },
       }];
@@ -211,7 +211,7 @@ export const REPORTS: ReportDef[] = [
   {
     id: 'forwarder-comparison',
     title: 'Freight Forwarder Comparison',
-    description: 'Freight and clearance cost per forwarder, average per shipment and freight as % of invoice value.',
+    description: 'Freight and clearance cost per forwarder, average per shipment and freight as % of supplier invoice.',
     orientation: 'landscape',
     build: (ctx) => {
       const m = aggregate(ctx, (s) => s.forwarder?.name ?? 'No forwarder');
@@ -221,7 +221,7 @@ export const REPORTS: ReportDef[] = [
       }));
       return [{
         name: 'By forwarder',
-        columns: [{ header: 'Forwarder', key: 'name', width: 30 }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Product invoice', 'invoice'), money('Freight', 'freight'), money('Avg freight / shipment', 'avgFreight'), pct('Freight % of invoice', 'freightPct'), money('Clearance', 'clearance'), money('Transport', 'transport'), money('Landed cost', 'landed'), pct('Additional %', 'addPct')],
+        columns: [{ header: 'Forwarder', key: 'name', width: 30 }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Supplier invoice', 'invoice'), money('Freight', 'freight'), money('Avg freight / shipment', 'avgFreight'), pct('Freight % of invoice', 'freightPct'), money('Clearance', 'clearance'), money('Transport', 'transport'), money('Landed cost', 'landed'), pct('Expenses % of invoice', 'addPct')],
         rows,
         totals: { name: 'TOTAL', ...totalsOf(rows, ['shipments', 'invoice', 'freight', 'clearance', 'transport', 'landed']) },
       }];
@@ -230,14 +230,14 @@ export const REPORTS: ReportDef[] = [
   {
     id: 'monthly',
     title: 'Monthly Import Cost Report',
-    description: 'Import costs per month (by supplier invoice date): invoice value, cost groups, landed cost and additional %.',
+    description: 'Import costs per month (by supplier invoice date): invoice value, cost groups, landed cost and expense % of invoice.',
     orientation: 'landscape',
     build: (ctx) => {
       const m = aggregate(ctx, (s) => monthKey(s.supplier_invoice_date ?? s.created_at));
       const rows = [...m.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, a]) => ({ month: monthLabel(k), shipments: a.shipments, invoice: a.invoice, ...groupVals(a), landed: a.landed, addPct: a.invoice ? percentOf(a.additional, a.invoice) : '' }));
       return [{
         name: 'By month',
-        columns: [{ header: 'Month', key: 'month' }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Product invoice', 'invoice'), ...groupCols(), money('Landed cost', 'landed'), pct('Additional %', 'addPct')],
+        columns: [{ header: 'Month', key: 'month' }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Supplier invoice', 'invoice'), ...groupCols(), money('Landed cost', 'landed'), pct('Expenses % of invoice', 'addPct')],
         rows,
         totals: { month: 'TOTAL', ...totalsOf(rows, ['shipments', 'invoice', 'landed', ...COST_GROUPS.map((g) => `g_${g}`)]) },
       }];
@@ -246,56 +246,16 @@ export const REPORTS: ReportDef[] = [
   {
     id: 'country-wise',
     title: 'Country-wise Import Cost Report',
-    description: 'Shipments, invoice value, landed cost and additional % by country of origin.',
+    description: 'Shipments, invoice value, landed cost and expense % of invoice by country of origin.',
     orientation: 'landscape',
     build: (ctx) => {
       const m = aggregate(ctx, (s) => s.country_of_origin || s.supplier?.country || 'Unknown');
       const rows = [...m.entries()].map(([k, a]) => ({ country: k, shipments: a.shipments, invoice: a.invoice, ...groupVals(a), landed: a.landed, addPct: a.invoice ? percentOf(a.additional, a.invoice) : '' }));
       return [{
         name: 'By country',
-        columns: [{ header: 'Country', key: 'country', width: 22 }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Product invoice', 'invoice'), ...groupCols(), money('Landed cost', 'landed'), pct('Additional %', 'addPct')],
+        columns: [{ header: 'Country', key: 'country', width: 22 }, { header: 'Shipments', key: 'shipments', format: 'int' }, money('Supplier invoice', 'invoice'), ...groupCols(), money('Landed cost', 'landed'), pct('Expenses % of invoice', 'addPct')],
         rows,
         totals: { country: 'TOTAL', ...totalsOf(rows, ['shipments', 'invoice', 'landed', ...COST_GROUPS.map((g) => `g_${g}`)]) },
-      }];
-    },
-  },
-  {
-    id: 'product-landed',
-    title: 'Product Landed Cost Report',
-    description: 'Landed cost per product line and per unit. Uses the saved allocation; shipments not yet saved are calculated with their default methods (marked “calculated”).',
-    orientation: 'landscape',
-    build: (ctx) => {
-      const rows: Record<string, unknown>[] = [];
-      for (const s of ctx.shipments) {
-        const prods = ctx.data.products.filter((p) => p.shipment_id === s.id);
-        if (!prods.length) continue;
-        const saved = ctx.data.allocations.filter((a) => a.shipment_id === s.id);
-        const byCat = new Map<string, number>();
-        for (const e of ctx.expensesOf(s.id)) {
-          const c = ctx.data.categories.find((x) => x.id === e.category_id);
-          if (c?.is_allocatable) byCat.set(c.id, (byCat.get(c.id) ?? 0) + toCents(Number(e.amount_sar)));
-        }
-        const cats: CategoryToAllocate[] = [...byCat.entries()].map(([id, cents]) => {
-          const c = ctx.data.categories.find((x) => x.id === id)!;
-          const sv = saved.filter((a) => a.category_id === id);
-          return { category_id: id, category_name: c.name, amount_sar: cents / 100, method: sv[0]?.method ?? c.default_allocation_method, manualShares: Object.fromEntries(sv.filter((a) => a.method === 'manual').map((a) => [a.shipment_product_id, Number(a.basis_value)])) };
-        });
-        const res = allocateShipment(prods.map((p) => ({ id: p.id, quantity: Number(p.quantity), invoice_value_sar: Number(p.invoice_value_sar), net_weight: p.net_weight, gross_weight: p.gross_weight })), cats);
-        const savedKey = new Set(saved.map((a) => `${a.category_id}|${a.shipment_product_id}|${toCents(Number(a.allocated_amount_sar))}`));
-        const isSaved = saved.length > 0 && saved.length === res.rows.length && res.rows.every((r) => savedKey.has(`${r.category_id}|${r.shipment_product_id}|${toCents(r.allocated_amount_sar)}`));
-        for (const p of res.products) {
-          const src = prods.find((x) => x.id === p.id)!;
-          rows.push({
-            code: s.shipment_code, item: src.item_code, desc: src.description, qty: p.quantity, uom: src.unit_of_measure, invoice: p.invoice_value_sar, alloc: p.allocated_total,
-            landed: p.landed_cost, unit: p.landed_cost_per_unit, uplift: p.uplift_pct, basis: isSaved ? 'saved' : res.issues.length ? 'calculated (incomplete)' : 'calculated',
-          });
-        }
-      }
-      return [{
-        name: 'Product landed cost',
-        columns: [{ header: 'Shipment', key: 'code' }, { header: 'Item code', key: 'item' }, { header: 'Description', key: 'desc', width: 32 }, { header: 'Qty', key: 'qty', format: 'num' }, { header: 'UoM', key: 'uom' }, money('Invoice SAR', 'invoice'), money('Allocated SAR', 'alloc'), money('Landed SAR', 'landed'), { header: 'Per unit SAR', key: 'unit', format: 'num' }, pct('Uplift %', 'uplift'), { header: 'Basis', key: 'basis' }],
-        rows,
-        totals: { code: 'TOTAL', ...totalsOf(rows, ['invoice', 'alloc', 'landed']) },
       }];
     },
   },
@@ -327,23 +287,23 @@ export const REPORTS: ReportDef[] = [
   {
     id: 'shipment-comparison',
     title: 'Shipment Comparison Report',
-    description: 'Side-by-side cost structure of shipments: each cost group in SAR and as % of landed cost.',
+    description: 'Side-by-side cost structure of shipments: each cost group in SAR and as % of the supplier invoice.',
     orientation: 'landscape',
     build: (ctx) => {
       const rows = ctx.shipments.map((s) => {
         const a = ctx.analyses.get(s.id)!;
         return {
           code: s.shipment_code, supplier: s.supplier?.name ?? '', invoice: a.productInvoiceValue, ...groupVals(a),
-          ...Object.fromEntries(COST_GROUPS.filter((g) => g !== 'product_invoice').map((g) => [`p_${g}`, percentOf(a.byGroup[g], a.totalLandedCost)])),
+          ...Object.fromEntries(COST_GROUPS.filter((g) => g !== 'product_invoice').map((g) => [`p_${g}`, a.productInvoiceValue ? percentOf(a.byGroup[g], a.productInvoiceValue) : ''])),
           landed: a.totalLandedCost, addPct: a.additionalExpensePercentage ?? '',
         };
       });
       return [{
         name: 'Shipment comparison',
         columns: [
-          { header: 'Shipment', key: 'code' }, { header: 'Supplier', key: 'supplier', width: 24 }, money('Product invoice', 'invoice'), ...groupCols(),
-          ...COST_GROUPS.filter((g) => g !== 'product_invoice').map((g) => pct(`${COST_GROUP_LABELS[g]} %`, `p_${g}`)),
-          money('Landed cost', 'landed'), pct('Additional %', 'addPct'),
+          { header: 'Shipment', key: 'code' }, { header: 'Supplier', key: 'supplier', width: 24 }, money('Supplier invoice', 'invoice'), ...groupCols(),
+          ...COST_GROUPS.filter((g) => g !== 'product_invoice').map((g) => pct(`${COST_GROUP_LABELS[g]} % of inv.`, `p_${g}`)),
+          money('Landed cost', 'landed'), pct('Expenses % of invoice', 'addPct'),
         ],
         rows,
         totals: { code: 'TOTAL', ...totalsOf(rows, ['invoice', 'landed', ...COST_GROUPS.map((g) => `g_${g}`)]) },

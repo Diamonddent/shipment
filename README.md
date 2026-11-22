@@ -20,8 +20,6 @@ A web application for managing international shipments of medical and dental sup
 | `#/shipments/new` | **New Shipment wizard**: the 9-step workflow (create → supplier invoice → products → expenses → documents → review → landed cost → complete → export) |
 | `#/shipments/:id` | **Shipment Details**: workflow stepper, warnings, tabs for Overview (cost analysis table and chart), Expenses, Products, Landed Cost, Documents and History (audit) |
 | `#/expenses` | **Expenses**: all fields; live *Amount SAR = Original × Rate*; partial payments; manager review; soft delete; duplicate detection with override |
-| `#/products` | **Products**: catalogue CRUD and every shipment product line, with landed cost per unit |
-| `#/landed-cost/:id` | **Landed Cost Calculator**: allocation method per category (value / quantity / net weight / gross weight / manual %), reconciled to the halala, then saved |
 | `#/suppliers`, `#/forwarders` | **Suppliers** and **freight forwarders**, with cost statistics and a forwarder comparison |
 | `#/reports` | **10 reports**, each in Excel, CSV and PDF, filtered by date, supplier and shipment. Also the **Shipment Cost Statement** PDF for management |
 | `#/documents` | **Documents**: upload to Drive, view in Drive, download, delete (permission-checked and audited), ZIP per shipment/PO |
@@ -41,7 +39,7 @@ All financial math lives in pure, unit-tested functions in `src/lib/calculations
   - *Import VAT* (paid at customs) is its own category. It is included in landed cost, as the formula requires, and flagged as recoverable. Every screen also shows **landed cost excluding recoverable VAT**.
   - The *VAT amount* field on a service invoice (freight, clearance) is informational. It is reported separately and **not** added to landed cost, unless an admin turns on *Settings → Application → Add service-invoice VAT to landed cost*.
 - **Payable amount** of an expense = original amount + its VAT amount. Payment status (Unpaid / Partially Paid / Paid) is derived by the database from `expense_payments`. Overpayment is rejected.
-- **Allocation:** each category has its own method. Rounding uses the largest-remainder method, so each category allocates exactly its total. A category whose basis is zero (for example, no weights entered) is reported as an issue and is never silently mis-allocated. Save is disabled until everything reconciles, and the database checks the reconciliation again (`save_allocations`).
+- **Key metric:** each expense and the total expenses as a % of the supplier invoice value (expense ÷ supplier invoice × 100). Products and item-level landed cost were removed (migration 0006, 2026-11-22).
 - **Cancelled shipments** are excluded from summaries unless *Include cancelled* is ticked. Archived shipments are hidden from the register and dashboard.
 
 ## 3. Local setup
@@ -98,7 +96,7 @@ Without the Supabase variables, the app shows a *Configuration required* screen 
 
 ### Database overview
 
-- **Tables:** `profiles`, `users_roles`, `shipments`, `suppliers`, `freight_forwarders`, `products`, `shipment_products`, `expense_categories`, `shipment_expenses`, `expense_payments`, `currencies`, `exchange_rates`, `expense_allocations`, `shipment_documents`, `audit_logs`, `application_settings` (plus the `code_counters` helper).
+- **Tables:** `profiles`, `users_roles`, `shipments`, `suppliers`, `freight_forwarders`, `expense_categories`, `shipment_expenses`, `expense_payments`, `currencies`, `exchange_rates`, `shipment_documents`, `audit_logs`, `application_settings` (plus the `code_counters` helper).
 - **Structure:** UUID primary keys, foreign keys, `created_at` and `updated_at` triggers, indexes, and CHECK constraints. For example, a SAR line must have rate 1, and `amount_sar = round(original × rate, 2)` is enforced by a constraint.
 - **Auto numbers:** **Shipment ID `SHP-YYYY-NNNN`**, expense numbers `EXP-YYYY-NNNNN`, and document numbers `DOC-<PO without dash>-<NNN>`, which use a per-shipment counter (`reserve_document_no`).
 - **RLS helpers:** `current_app_role()` (note: `current_role` is a reserved SQL keyword, hence the name), `is_admin()`, `is_manager_or_admin()`, `can_view_shipment()`, `can_edit_shipment()`.
@@ -107,7 +105,7 @@ Without the Supabase variables, the app shows a *Configuration required* screen 
   - **Employee:** creates shipments and edits the ones they created or were assigned. Adds expenses, products and documents to those shipments. Sees all shipments, or only their own if *Employees can view all shipments* is turned off. Only managers and admins can change `review_status`; this is enforced by a trigger.
 - **Audit triggers** cover shipments, expenses, payments, products, documents, categories, currencies, rates, roles, settings, suppliers, forwarders and profiles. They record before/after JSON, the user and the time. Deletes are soft (`is_deleted`, `is_archived`), and hard deletes of financial rows are admin-only at RLS level.
 - **Views:** `v_shipment_cost_summary` (per-shipment landed cost, using the same formula as `calculations.ts`) and `v_product_landed_cost`. Both use `security_invoker`, so RLS applies.
-- **Functions:** `remove_demo_data()`, `save_allocations()` (atomic, reconciliation-checked) and `log_audit_event()`.
+- **Functions:** `remove_demo_data()` and `log_audit_event()`.
 
 ## 5. Google Drive document storage
 
@@ -209,6 +207,6 @@ supabase/seed.sql       demo data (is_demo) + defaults
 The schema is ready for a later sync with Odoo:
 
 - **Reserved columns:** `suppliers.odoo_partner_id`, `freight_forwarders.odoo_partner_id`, `products.odoo_product_id` and `shipments.odoo_picking_ref`. They are reserved for mapping to `res.partner`, `product.product` and `stock.picking`.
-- **Landed cost mapping:** `v_shipment_cost_summary` and `v_product_landed_cost` give per-shipment and per-product landed cost in SAR. They map directly onto Odoo **Landed Costs** (`stock.landed.cost`), with one cost line per expense category and the split method taken from `expense_allocations.method` (value → *By Current Cost*, quantity → *By Quantity*, gross weight → *By Weight*, manual → *Equal* or adjusted lines).
+- **Cost mapping:** `v_shipment_cost_summary` gives per-shipment cost in SAR, including `additional_expense_pct` (expenses % of supplier invoice).
 - **Audit trail:** expense numbers, document numbers and Drive links are stable identifiers to attach to Odoo vendor bills (`account.move`). `audit_logs` gives the change history for reconciliation.
 - **Connecting:** use a Supabase Edge Function or a small server with the service-role key calling Odoo's JSON-RPC (`/jsonrpc`) or the REST API. Never call Odoo from the browser with credentials.

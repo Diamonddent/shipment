@@ -101,7 +101,7 @@ export default function ShipmentsPage() {
     { key: 'date', header: 'Invoice date', hideBelow: 'lg', sortValue: (s) => s.supplier_invoice_date ?? '', cell: (s) => <span className="whitespace-nowrap">{fmtDate(s.supplier_invoice_date)}</span> },
     { key: 'eta', header: 'Arrival', hideBelow: 'lg', sortValue: (s) => s.actual_arrival_date ?? s.expected_arrival_date ?? '', cell: (s) => <div><p className="whitespace-nowrap">{fmtDate(s.actual_arrival_date ?? s.expected_arrival_date)}</p><p className="text-xs text-slate-500">{s.actual_arrival_date ? 'actual' : s.expected_arrival_date ? 'expected' : ''}</p></div> },
     { key: 'landed', header: 'Landed cost SAR', align: 'right', sortValue: (s) => analyses.get(s.id)?.totalLandedCost ?? 0, cell: (s) => <span className="font-semibold">{fmtAmount(analyses.get(s.id)?.totalLandedCost ?? 0)}</span> },
-    { key: 'pct', header: 'Add. %', align: 'right', hideBelow: 'md', sortValue: (s) => analyses.get(s.id)?.additionalExpensePercentage ?? -1, cell: (s) => fmtPct(analyses.get(s.id)?.additionalExpensePercentage) },
+    { key: 'pct', header: 'Exp. % of invoice', align: 'right', hideBelow: 'md', sortValue: (s) => analyses.get(s.id)?.additionalExpensePercentage ?? -1, cell: (s) => fmtPct(analyses.get(s.id)?.additionalExpensePercentage) },
     { key: 'status', header: 'Status', sortValue: (s) => s.status, cell: (s) => <ShipmentStatusPill status={s.status} /> },
     {
       key: 'a',
@@ -127,7 +127,7 @@ export default function ShipmentsPage() {
       { header: 'Shipment ID', key: 'code' }, { header: 'PO', key: 'po' }, { header: 'Reference', key: 'ref' }, { header: 'Supplier', key: 'supplier', width: 28 },
       { header: 'Supplier Invoice', key: 'inv' }, { header: 'Invoice Date', key: 'invDate', format: 'date' }, { header: 'Origin', key: 'country' }, { header: 'Method', key: 'method' },
       { header: 'Forwarder', key: 'ff', width: 24 }, { header: 'AWB/BL', key: 'awb' }, { header: 'Currency', key: 'cur' }, { header: 'Rate', key: 'rate', format: 'rate' },
-      { header: 'Status', key: 'status' }, { header: 'Product Invoice SAR', key: 'pi', format: 'money' }, { header: 'Landed Cost SAR', key: 'landed', format: 'money' }, { header: 'Additional %', key: 'pct', format: 'pct' },
+      { header: 'Status', key: 'status' }, { header: 'Supplier Invoice SAR', key: 'pi', format: 'money' }, { header: 'Landed Cost SAR', key: 'landed', format: 'money' }, { header: 'Expenses % of Invoice', key: 'pct', format: 'pct' },
     ],
     rows: filtered.map((s) => {
       const a = analyses.get(s.id);

@@ -29,7 +29,7 @@ export const shipmentsService = {
     if (!rows.length) throw new Error('You do not have permission to edit this shipment.');
     return rows[0];
   },
-  /** Copies the shipment header (not expenses, products or documents) into a new Draft shipment. */
+  /** Copies the shipment header (not expenses or documents) into a new Draft shipment. */
   duplicate: async (s: Shipment) => {
     const copy: ShipmentInput = {};
     for (const k of EDITABLE_KEYS) (copy as Record<string, unknown>)[k] = s[k as keyof Shipment];

@@ -6,8 +6,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { shipmentsService } from '@/services/shipments';
 import { expensesService } from '@/services/expenses';
-import { allocationsService, shipmentProductsService } from '@/services/shipmentProducts';
-import { forwardersService, productsService, suppliersService } from '@/services/masterData';
+import { forwardersService, suppliersService } from '@/services/masterData';
 import { categoriesService, currenciesService, settingsService } from '@/services/reference';
 import { documentsService } from '@/services/documents';
 import { usersService } from '@/services/users';
@@ -23,13 +22,8 @@ export const qk = {
   shipment: (id: string) => ['shipment', id] as const,
   expenses: ['expenses'] as const,
   shipmentExpenses: (id: string) => ['expenses', 'shipment', id] as const,
-  shipmentProducts: (id: string) => ['shipment-products', id] as const,
-  allShipmentProducts: ['shipment-products', 'all'] as const,
-  allocations: (id: string) => ['allocations', id] as const,
-  allAllocations: ['allocations', 'all'] as const,
   suppliers: ['suppliers'] as const,
   forwarders: ['forwarders'] as const,
-  products: ['products'] as const,
   categories: ['categories'] as const,
   currencies: ['currencies'] as const,
   rates: ['rates'] as const,
@@ -46,15 +40,8 @@ export const useShipment = (id: string | undefined) =>
 export const useAllExpenses = () => useQuery({ queryKey: qk.expenses, queryFn: expensesService.listAll });
 export const useShipmentExpenses = (id: string | undefined) =>
   useQuery({ queryKey: qk.shipmentExpenses(id ?? ''), queryFn: () => expensesService.listForShipment(id!), enabled: !!id });
-export const useShipmentProducts = (id: string | undefined) =>
-  useQuery({ queryKey: qk.shipmentProducts(id ?? ''), queryFn: () => shipmentProductsService.listForShipment(id!), enabled: !!id });
-export const useAllShipmentProducts = () => useQuery({ queryKey: qk.allShipmentProducts, queryFn: shipmentProductsService.listAll });
-export const useAllocations = (id: string | undefined) =>
-  useQuery({ queryKey: qk.allocations(id ?? ''), queryFn: () => allocationsService.listForShipment(id!), enabled: !!id });
-export const useAllAllocations = () => useQuery({ queryKey: qk.allAllocations, queryFn: allocationsService.listAll });
 export const useSuppliers = () => useQuery({ queryKey: qk.suppliers, queryFn: suppliersService.list });
 export const useForwarders = () => useQuery({ queryKey: qk.forwarders, queryFn: forwardersService.list });
-export const useProducts = () => useQuery({ queryKey: qk.products, queryFn: productsService.list });
 export const useCategories = () => useQuery({ queryKey: qk.categories, queryFn: categoriesService.list, staleTime: 5 * 60_000 });
 export const useCurrencies = () => useQuery({ queryKey: qk.currencies, queryFn: currenciesService.list, staleTime: 5 * 60_000 });
 export const useRates = () => useQuery({ queryKey: qk.rates, queryFn: () => currenciesService.rates() });
@@ -70,7 +57,6 @@ export interface AppSettings {
   includeLineVat: boolean;
   showLandedCostExclVat: boolean;
   employeesViewAll: boolean;
-  defaultAllocationMethod: string;
   driveRootFolderName: string;
   driveRootFolderId: string;
   maxUploadMb: number;
@@ -90,7 +76,6 @@ export function useSettings() {
       includeLineVat: bool('include_line_vat_in_landed_cost', false),
       showLandedCostExclVat: bool('show_landed_cost_excl_vat', true),
       employeesViewAll: bool('employees_view_all_shipments', true),
-      defaultAllocationMethod: str('default_allocation_method', 'value'),
       driveRootFolderName: str('google_drive_root_folder_name', 'Diamond Dent Shipments'),
       driveRootFolderId: str('drive_root_folder_id', ''),
       maxUploadMb: typeof raw.max_upload_mb === 'number' ? (raw.max_upload_mb as number) : 25,

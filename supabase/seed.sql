@@ -14,36 +14,7 @@ insert into public.currencies (code, name, symbol, decimals, current_rate, is_ba
   ('CNY', 'Chinese Yuan',       '¥',   2, 0.520000, false)
 on conflict (code) do nothing;
 
-insert into public.expense_categories (code, name, cost_group, is_allocatable, is_recoverable_vat, default_allocation_method, sort_order, is_system) values
-  ('PRODUCT_INVOICE', 'Product Invoice',        'product_invoice', false, false, 'value',        10,  true),
-  ('FREIGHT',         'International Freight',  'freight',         true,  false, 'gross_weight', 20,  true),
-  ('INSURANCE',       'Insurance',              'insurance',       true,  false, 'value',        30,  true),
-  ('CUSTOMS_DUTY',    'Customs Duty',           'customs_duty',    true,  false, 'value',        40,  true),
-  ('IMPORT_VAT',      'Import VAT',             'import_vat',      true,  true,  'value',        50,  true),
-  ('CLEARANCE',       'Customs Clearance',      'clearance',       true,  false, 'value',        60,  true),
-  ('SABER',           'SABER Charges',          'clearance',       true,  false, 'value',        70,  true),
-  ('SFDA',            'SFDA Charges',           'clearance',       true,  false, 'value',        80,  true),
-  ('TRANSPORT',       'Transportation',         'transportation',  true,  false, 'gross_weight', 90,  true),
-  ('HANDLING',        'Handling Charges',       'other',           true,  false, 'quantity',     100, true),
-  ('STORAGE',         'Storage Charges',        'other',           true,  false, 'gross_weight', 110, true),
-  ('BANK',            'Bank Charges',           'other',           true,  false, 'value',        120, true),
-  ('INSPECTION',      'Inspection Charges',     'other',           true,  false, 'value',        130, true),
-  ('DOCUMENTATION',   'Documentation Charges',  'other',           true,  false, 'value',        140, true),
-  ('OTHER',           'Other Expenses',         'other',           true,  false, 'value',        150, true)
-on conflict (code) do nothing;
-
-insert into public.application_settings (key, value, description) values
-  ('company_name',                    '"DIAMOND DENT TRADING CO."', 'Company name shown on reports'),
-  ('company_address',                 '"Riyadh, Kingdom of Saudi Arabia"', 'Address printed on the cost statement'),
-  ('company_vat_number',              '""', 'Company VAT registration number'),
-  ('include_line_vat_in_landed_cost', 'false', 'Add the VAT amount entered on service invoices to landed cost (default: report separately)'),
-  ('show_landed_cost_excl_vat',       'true',  'Show landed cost excluding recoverable Import VAT next to the total'),
-  ('employees_view_all_shipments',    'true',  'Employees can view all shipments (they can always edit only assigned/own shipments)'),
-  ('default_allocation_method',       '"value"', 'Default allocation method for new categories'),
-  ('google_drive_root_folder_name',   '"Diamond Dent Shipments"', 'Folder created by the app when no existing Drive folder is configured'),
-  ('drive_root_folder_id',            '""', 'ID of the existing company Google Drive folder that holds the per-PO shipment folders (uses the full Drive scope)'),
-  ('max_upload_mb',                   '25', 'Maximum document upload size in MB')
-on conflict (key) do nothing;
+-- expense categories and settings come from migration 0005_defaults.sql
 
 -- ---------------- Company configuration (NOT demo data) ----------------
 -- DIAMOND DENT company Google Drive folder that holds the per-PO shipment folders:
@@ -69,22 +40,6 @@ insert into public.freight_forwarders (id, name, country, contact_person, email,
   ('d2000000-0000-4000-8000-000000000003', '[DEMO] SkyBridge Courier Services', 'United Arab Emirates', 'Rania Haddad', 'support@skybridge.example', '+971 4 300 3000', 'Courier (DHL / FedEx)', 'Demo record', true)
 on conflict do nothing;
 
--- ---------------- DEMO product catalogue (12 products) ----------------
-insert into public.products (id, item_code, description, manufacturer, brand, hs_code, country_of_origin, unit_of_measure, unit_net_weight, unit_gross_weight, is_demo) values
-  ('d3000000-0000-4000-8000-000000000001', 'DEMO-IMP-4510', 'Dental Implant Fixture 4.5 x 10 mm', 'Alpine Dental', 'AlpineFix', '9021.29', 'Germany', 'PCS', 0.012, 0.03, true),
-  ('d3000000-0000-4000-8000-000000000002', 'DEMO-ABT-STR', 'Straight Titanium Abutment', 'Alpine Dental', 'AlpineFix', '9021.29', 'Germany', 'PCS', 0.008, 0.02, true),
-  ('d3000000-0000-4000-8000-000000000003', 'DEMO-CMP-A2', 'Composite Resin A2, 4 g syringe', 'Alpine Dental', 'NanoFill', '3006.40', 'Germany', 'PCS', 0.01, 0.025, true),
-  ('d3000000-0000-4000-8000-000000000004', 'DEMO-BND-5ML', 'Universal Bonding Agent 5 ml', 'Alpine Dental', 'NanoFill', '3006.40', 'Germany', 'PCS', 0.012, 0.03, true),
-  ('d3000000-0000-4000-8000-000000000005', 'DEMO-GLV-NM', 'Nitrile Exam Gloves M (box of 100)', 'Bright Medical', 'BrightCare', '4015.19', 'China', 'BOX', 0.55, 0.62, true),
-  ('d3000000-0000-4000-8000-000000000006', 'DEMO-MSK-L3', 'Surgical Face Mask Level 3 (box of 50)', 'Bright Medical', 'BrightCare', '6307.90', 'China', 'BOX', 0.25, 0.3, true),
-  ('d3000000-0000-4000-8000-000000000007', 'DEMO-BUR-DIA', 'Diamond Bur Assortment (pack of 10)', 'Pacific Dental', 'ProCut', '9018.49', 'United States', 'PACK', 0.02, 0.05, true),
-  ('d3000000-0000-4000-8000-000000000008', 'DEMO-ALG-500', 'Alginate Impression Material 500 g', 'Bright Medical', 'BrightCare', '3407.00', 'China', 'PCS', 0.5, 0.56, true),
-  ('d3000000-0000-4000-8000-000000000009', 'DEMO-HPC-HS', 'High-Speed Dental Handpiece', 'Pacific Dental', 'ProCut', '9018.41', 'United States', 'PCS', 0.15, 0.45, true),
-  ('d3000000-0000-4000-8000-000000000010', 'DEMO-ENDO-K25', 'Endodontic K-Files 25 mm (pack of 6)', 'Pacific Dental', 'EndoLine', '9018.49', 'United States', 'PACK', 0.01, 0.03, true),
-  ('d3000000-0000-4000-8000-000000000011', 'DEMO-STR-PCH', 'Sterilization Pouches 90 x 230 mm (box of 200)', 'Bright Medical', 'BrightCare', '4819.40', 'China', 'BOX', 0.9, 1.0, true),
-  ('d3000000-0000-4000-8000-000000000012', 'DEMO-XRY-S2', 'Intraoral X-ray Sensor, size 2', 'Alpine Dental', 'AlpineView', '9022.14', 'Germany', 'PCS', 0.2, 0.9, true)
-on conflict do nothing;
-
 -- ---------------- DEMO shipments (5) ----------------
 insert into public.shipments (id, shipment_code, reference_no, po_number, supplier_id, supplier_invoice_no, supplier_invoice_date, country_of_origin, shipping_method, forwarder_id, awb_bl_no, departure_date, expected_arrival_date, actual_arrival_date, customs_clearance_date, warehouse_receiving_date, currency_code, exchange_rate, status, workflow_step, notes, created_at, is_demo) values
   ('d4000000-0000-4000-8000-000000000001', 'DEMO-SHP-2026-0001', 'REF-ALP-0626', 'PO-4501', 'd1000000-0000-4000-8000-000000000001', 'ALP-INV-26-1187', '2026-06-12', 'Germany', 'air', 'd2000000-0000-4000-8000-000000000001', 'AWB 176-44512093', '2026-06-20', '2026-06-23', '2026-06-23', '2026-06-26', '2026-06-28', 'EUR', 4.05, 'completed', 8, 'Demo shipment', '2026-06-12 09:00:00+03', true),
@@ -96,23 +51,6 @@ on conflict do nothing;
 
 update public.shipments set completed_at = '2026-06-30 14:00:00+03'
  where shipment_code = 'DEMO-SHP-2026-0001' and is_demo;
-
--- ---------------- DEMO shipment products (13 lines) ----------------
-insert into public.shipment_products (id, shipment_id, product_id, item_code, description, manufacturer, brand, hs_code, country_of_origin, quantity, unit_of_measure, unit_price, currency_code, exchange_rate, net_weight, gross_weight, lot_number, expiry_date, sort_order, is_demo) values
-  ('d5000000-0000-4000-8000-000000000001', 'd4000000-0000-4000-8000-000000000001', 'd3000000-0000-4000-8000-000000000001', 'DEMO-IMP-4510', 'Dental Implant Fixture 4.5 x 10 mm', 'Alpine Dental', 'AlpineFix', '9021.29', 'Germany', 200, 'PCS', 85, 'EUR', 4.05, 2.4, 6.0, 'LOT-2601', '2029-02-28', 0, true),
-  ('d5000000-0000-4000-8000-000000000002', 'd4000000-0000-4000-8000-000000000001', 'd3000000-0000-4000-8000-000000000002', 'DEMO-ABT-STR', 'Straight Titanium Abutment', 'Alpine Dental', 'AlpineFix', '9021.29', 'Germany', 200, 'PCS', 32, 'EUR', 4.05, 1.6, 4.0, 'LOT-2602', '2030-03-28', 1, true),
-  ('d5000000-0000-4000-8000-000000000003', 'd4000000-0000-4000-8000-000000000001', 'd3000000-0000-4000-8000-000000000012', 'DEMO-XRY-S2', 'Intraoral X-ray Sensor, size 2', 'Alpine Dental', 'AlpineView', '9022.14', 'Germany', 4, 'PCS', 2150, 'EUR', 4.05, 0.8, 3.6, 'LOT-2603', '2028-04-28', 2, true),
-  ('d5000000-0000-4000-8000-000000000004', 'd4000000-0000-4000-8000-000000000002', 'd3000000-0000-4000-8000-000000000005', 'DEMO-GLV-NM', 'Nitrile Exam Gloves M (box of 100)', 'Bright Medical', 'BrightCare', '4015.19', 'China', 1500, 'BOX', 4.2, 'USD', 3.75, 825.0, 930.0, 'LOT-2604', '2029-05-28', 0, true),
-  ('d5000000-0000-4000-8000-000000000005', 'd4000000-0000-4000-8000-000000000002', 'd3000000-0000-4000-8000-000000000006', 'DEMO-MSK-L3', 'Surgical Face Mask Level 3 (box of 50)', 'Bright Medical', 'BrightCare', '6307.90', 'China', 1200, 'BOX', 3.1, 'USD', 3.75, 300.0, 360.0, 'LOT-2605', '2030-06-28', 1, true),
-  ('d5000000-0000-4000-8000-000000000006', 'd4000000-0000-4000-8000-000000000002', 'd3000000-0000-4000-8000-000000000011', 'DEMO-STR-PCH', 'Sterilization Pouches 90 x 230 mm (box of 200)', 'Bright Medical', 'BrightCare', '4819.40', 'China', 800, 'BOX', 6.5, 'USD', 3.75, 720.0, 800.0, 'LOT-2606', '2028-07-28', 2, true),
-  ('d5000000-0000-4000-8000-000000000007', 'd4000000-0000-4000-8000-000000000003', 'd3000000-0000-4000-8000-000000000009', 'DEMO-HPC-HS', 'High-Speed Dental Handpiece', 'Pacific Dental', 'ProCut', '9018.41', 'United States', 10, 'PCS', 420, 'USD', 3.75, 1.5, 4.5, 'LOT-2607', '2029-08-28', 0, true),
-  ('d5000000-0000-4000-8000-000000000008', 'd4000000-0000-4000-8000-000000000003', 'd3000000-0000-4000-8000-000000000007', 'DEMO-BUR-DIA', 'Diamond Bur Assortment (pack of 10)', 'Pacific Dental', 'ProCut', '9018.49', 'United States', 100, 'PACK', 18, 'USD', 3.75, 2.0, 5.0, 'LOT-2608', '2030-09-28', 1, true),
-  ('d5000000-0000-4000-8000-000000000009', 'd4000000-0000-4000-8000-000000000003', 'd3000000-0000-4000-8000-000000000010', 'DEMO-ENDO-K25', 'Endodontic K-Files 25 mm (pack of 6)', 'Pacific Dental', 'EndoLine', '9018.49', 'United States', 150, 'PACK', 9.5, 'USD', 3.75, 1.5, 4.5, 'LOT-2609', '2028-01-28', 2, true),
-  ('d5000000-0000-4000-8000-000000000010', 'd4000000-0000-4000-8000-000000000004', 'd3000000-0000-4000-8000-000000000003', 'DEMO-CMP-A2', 'Composite Resin A2, 4 g syringe', 'Alpine Dental', 'NanoFill', '3006.40', 'Germany', 300, 'PCS', 14, 'EUR', 4.05, 3.0, 7.5, 'LOT-2610', '2029-02-28', 0, true),
-  ('d5000000-0000-4000-8000-000000000011', 'd4000000-0000-4000-8000-000000000004', 'd3000000-0000-4000-8000-000000000004', 'DEMO-BND-5ML', 'Universal Bonding Agent 5 ml', 'Alpine Dental', 'NanoFill', '3006.40', 'Germany', 120, 'PCS', 38, 'EUR', 4.05, 1.44, 3.6, 'LOT-2611', '2030-03-28', 1, true),
-  ('d5000000-0000-4000-8000-000000000012', 'd4000000-0000-4000-8000-000000000005', 'd3000000-0000-4000-8000-000000000008', 'DEMO-ALG-500', 'Alginate Impression Material 500 g', 'Bright Medical', 'BrightCare', '3407.00', 'China', 400, 'PCS', 45, 'CNY', 0.52, 200.0, 224.0, 'LOT-2612', '2028-04-28', 0, true),
-  ('d5000000-0000-4000-8000-000000000013', 'd4000000-0000-4000-8000-000000000005', 'd3000000-0000-4000-8000-000000000005', 'DEMO-GLV-NM', 'Nitrile Exam Gloves M (box of 100)', 'Bright Medical', 'BrightCare', '4015.19', 'China', 500, 'BOX', 28, 'CNY', 0.52, 275.0, 310.0, 'LOT-2613', '2029-05-28', 1, true)
-on conflict do nothing;
 
 -- ---------------- DEMO expenses (mixed currencies, paid / partial / unpaid) ----------------
 insert into public.shipment_expenses (id, expense_no, shipment_id, category_id, description, service_provider, supplier_id, forwarder_id, invoice_no, invoice_date, currency_code, original_amount, exchange_rate, vat_amount, payment_method, review_status, notes, is_demo) values
