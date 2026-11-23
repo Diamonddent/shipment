@@ -13,18 +13,18 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants: Record<Variant, string> = {
-  primary: 'bg-primary text-white hover:bg-primary-600 shadow-sm dark:bg-accent dark:hover:bg-accent-500',
-  secondary: 'bg-accent-50 text-primary hover:bg-accent-100 dark:bg-navy-700 dark:text-slate-100 dark:hover:bg-navy-800',
-  outline: 'border border-line bg-white text-slate-700 hover:bg-slate-50 dark:border-navy-700 dark:bg-navy-900 dark:text-slate-200 dark:hover:bg-navy-800',
-  ghost: 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-navy-800',
+  primary: 'btn-gradient shadow-[0_8px_20px_-8px_rgba(53,87,212,0.7)]',
+  secondary: 'border border-[var(--bd)] bg-[var(--gl)] text-primary hover:bg-white/70 dark:text-slate-100 dark:hover:bg-white/15',
+  outline: 'border border-[var(--bd2)] bg-[var(--gl2)] text-slate-700 hover:bg-white/70 dark:border-white/20 dark:text-slate-100 dark:hover:bg-white/15',
+  ghost: 'text-slate-600 hover:bg-white/60 dark:text-slate-300 dark:hover:bg-white/10',
   danger: 'bg-red-600 text-white hover:bg-red-700 shadow-sm',
   success: 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm',
 };
 const sizes: Record<Size, string> = {
-  sm: 'h-8 px-3 text-xs gap-1.5',
-  md: 'h-9 px-4 text-sm gap-2',
-  lg: 'h-11 px-5 text-sm gap-2',
-  icon: 'h-9 w-9 justify-center',
+  sm: 'h-8 px-3 text-xs gap-1.5 rounded-xl',
+  md: 'h-10 px-4 text-sm gap-2 rounded-xl',
+  lg: 'h-11 px-5 text-sm gap-2 rounded-2xl',
+  icon: 'h-10 w-10 justify-center rounded-xl',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
@@ -37,7 +37,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       type={type}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex shrink-0 items-center rounded-lg font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:cursor-not-allowed disabled:opacity-50',
+        'lg-press inline-flex shrink-0 items-center justify-center font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:cursor-not-allowed disabled:opacity-50',
         variants[variant],
         sizes[size],
         className,

@@ -15,8 +15,12 @@ import { inRange } from '@/lib/utils';
 import { shipmentWarnings } from '@/lib/warnings';
 import { CHART_COLORS } from '@/features/shipments/CostAnalysisPanel';
 import type { ExpenseWithRefs } from '@/types/database';
+import { prefersReducedMotion } from '@/hooks/useMediaQuery';
 
-const tooltipStyle = { borderRadius: 10, border: '1px solid #E5E9F0', fontSize: 12 };
+const tooltipStyle = { borderRadius: 14, fontSize: 12 };
+const GRID_STROKE = 'rgba(148,163,184,0.25)';
+// Recharts built-in entry animations (off when the user prefers reduced motion)
+const animate = !prefersReducedMotion();
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -104,7 +108,7 @@ export default function DashboardPage() {
         subtitle={`Import cost overview in SAR${includeCancelled ? ' (including cancelled shipments)' : ' — cancelled shipments excluded'}`}
         actions={<Button icon={<Plus className="h-4 w-4" />} onClick={() => navigate('/shipments/new')}>New shipment</Button>}
       />
-      <Card className="mb-6 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
+      <Card className="mb-6 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5 [&>*]:min-w-0">
         <label className="text-xs text-slate-500">From<Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1" /></label>
         <label className="text-xs text-slate-500">To<Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="mt-1" /></label>
         <label className="text-xs text-slate-500">Supplier
@@ -125,14 +129,14 @@ export default function DashboardPage() {
       {error ? (
         <Card><ErrorState error={error} onRetry={() => { shipments.refetch(); expenses.refetch(); }} /></Card>
       ) : loading ? (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
+        <div className="grid grid-cols-1 gap-4 min-[400px]:grid-cols-2 lg:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
       ) : (shipments.data ?? []).length === 0 ? (
         <Card>
           <EmptyState icon={<Ship className="h-6 w-6" />} title="No shipments yet" message="Create your first shipment to start tracking expenses against the supplier invoice. Every figure on this dashboard is calculated from your records." action={<Button icon={<Plus className="h-4 w-4" />} onClick={() => navigate('/shipments/new')}>New shipment</Button>} />
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
             <KpiCard label="Total shipments" value={summary.totalShipments} icon={<Ship className="h-5 w-5" />} />
             <KpiCard label="Supplier invoice value" value={fmtMoney(summary.productInvoiceValue)} icon={<Package className="h-5 w-5" />} />
             <KpiCard label="Freight expenses" value={fmtMoney(summary.freight)} icon={<Plane className="h-5 w-5" />} tone="violet" />
@@ -145,14 +149,14 @@ export default function DashboardPage() {
             <KpiCard label="Unpaid expenses" value={summary.unpaidExpenseCount} icon={<Wallet className="h-5 w-5" />} tone="red" hint={`Outstanding ${fmtMoney(summary.unpaidExpenseAmount)}`} />
           </div>
 
-          <div className="mt-6 grid gap-6 xl:grid-cols-2">
+          <div className="mt-6 grid gap-4 sm:gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader title="Expense distribution" subtitle="Share of total expenses (supplier invoice excluded)" />
               <div className="h-72 p-4">
                 {distribution.length === 0 ? <EmptyState title="No expenses in this selection" /> : (
                   <ResponsiveContainer>
                     <PieChart>
-                      <Pie isAnimationActive={false} data={distribution} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={1}>
+                      <Pie isAnimationActive={animate} data={distribution} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={1}>
                         {distribution.map((d, i) => <Cell key={d.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                       </Pie>
                       <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`${fmtMoney(v)} · ${fmtPct((v / summary.additionalExpenses) * 100)}`, n]} />
@@ -169,15 +173,15 @@ export default function DashboardPage() {
                 {monthly.length === 0 ? <EmptyState title="No data" /> : (
                   <ResponsiveContainer>
                     <ComposedChart data={monthly}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E9F0" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
                       <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                       <YAxis yAxisId="l" tickFormatter={fmtCompact} tick={{ fontSize: 11 }} width={50} />
                       <YAxis yAxisId="r" orientation="right" tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 11 }} width={40} />
                       <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => (n === 'Expenses % of invoice' ? fmtPct(v) : fmtMoney(v))} />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar yAxisId="l" isAnimationActive={false} dataKey="invoice" name="Supplier invoice" fill="#1E3A8A" radius={[4, 4, 0, 0]} />
-                      <Bar yAxisId="l" isAnimationActive={false} dataKey="additional" name="Expenses" fill="#F59E0B" radius={[4, 4, 0, 0]} />
-                      <Line yAxisId="r" isAnimationActive={false} dataKey="pct" name="Expenses % of invoice" stroke="#2563EB" strokeWidth={2} dot={{ r: 3 }} />
+                      <Bar yAxisId="l" isAnimationActive={animate} dataKey="invoice" name="Supplier invoice" fill="#1E3A8A" radius={[4, 4, 0, 0]} />
+                      <Bar yAxisId="l" isAnimationActive={animate} dataKey="additional" name="Expenses" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+                      <Line yAxisId="r" isAnimationActive={animate} dataKey="pct" name="Expenses % of invoice" stroke="#2563EB" strokeWidth={2} dot={{ r: 3 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 )}
@@ -189,13 +193,13 @@ export default function DashboardPage() {
                 {comparison.length === 0 ? <EmptyState title="No data" /> : (
                   <ResponsiveContainer>
                     <BarChart data={comparison} onClick={(e) => { const p = e?.activePayload?.[0]?.payload as { full?: string } | undefined; const s = included.find((x) => x.shipment_code === p?.full); if (s) navigate(`/shipments/${s.id}`); }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E9F0" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
                       <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                       <YAxis tickFormatter={fmtCompact} tick={{ fontSize: 11 }} width={50} />
                       <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => fmtMoney(v)} labelFormatter={(_, p) => { const x = p?.[0]?.payload as { full?: string; pct?: number | null } | undefined; return x ? `${x.full} · expenses ${fmtPct(x.pct ?? null)} of invoice` : ''; }} />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar isAnimationActive={false} dataKey="invoice" name="Supplier invoice" fill="#1E3A8A" radius={[4, 4, 0, 0]} cursor="pointer" />
-                      <Bar isAnimationActive={false} dataKey="additional" name="Expenses" fill="#0EA5E9" radius={[4, 4, 0, 0]} cursor="pointer" />
+                      <Bar isAnimationActive={animate} dataKey="invoice" name="Supplier invoice" fill="#1E3A8A" radius={[4, 4, 0, 0]} cursor="pointer" />
+                      <Bar isAnimationActive={animate} dataKey="additional" name="Expenses" fill="#0EA5E9" radius={[4, 4, 0, 0]} cursor="pointer" />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -207,14 +211,14 @@ export default function DashboardPage() {
                 {byCountry.length === 0 ? <EmptyState title="No data" /> : (
                   <ResponsiveContainer>
                     <BarChart data={byCountry} layout="vertical" margin={{ left: 10, right: 24 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E9F0" horizontal={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} horizontal={false} />
                       <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
                       <YAxis type="category" dataKey="country" tick={{ fontSize: 11 }} width={110} />
                       <Tooltip
                         contentStyle={tooltipStyle}
                         formatter={(v: number, _n: string, item) => [`${v} shipment(s) · ${fmtMoney((item.payload as { expenses: number }).expenses)}`, 'Shipments · total expenses']}
                       />
-                      <Bar isAnimationActive={false} dataKey="shipments" name="Shipments" radius={[0, 6, 6, 0]} barSize={22}>
+                      <Bar isAnimationActive={animate} dataKey="shipments" name="Shipments" radius={[0, 6, 6, 0]} barSize={22}>
                         {byCountry.map((c, i) => <Cell key={c.country} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                       </Bar>
                     </BarChart>
@@ -232,7 +236,7 @@ export default function DashboardPage() {
               <ul className="divide-y divide-line dark:divide-navy-700">
                 {warnings.slice(0, 10).map(({ s, w }) => (
                   <li key={s.id}>
-                    <Link to={`/shipments/${s.id}`} className="flex gap-3 px-5 py-3 hover:bg-slate-50 dark:hover:bg-navy-800">
+                    <Link to={`/shipments/${s.id}`} className="flex gap-3 px-5 py-3 hover:bg-white/50 dark:hover:bg-white/5">
                       <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${w.some((x) => x.level === 'error') ? 'text-red-500' : 'text-amber-500'}`} />
                       <div className="min-w-0 text-sm">
                         <p className="font-medium text-slate-900 dark:text-white">{s.shipment_code} <span className="font-normal text-slate-500">· {s.supplier?.name ?? 'No supplier'} · PO {s.po_number ?? '—'}</span></p>

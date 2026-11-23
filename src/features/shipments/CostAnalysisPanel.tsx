@@ -1,3 +1,4 @@
+import { prefersReducedMotion } from '@/hooks/useMediaQuery';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { Card, CardHeader, EmptyState } from '@/components/ui';
 import type { ShipmentCostAnalysis } from '@/lib/calculations';
@@ -93,7 +94,7 @@ export function CostAnalysisPanel({ analysis }: { analysis: ShipmentCostAnalysis
             ) : (
               <ResponsiveContainer>
                 <PieChart>
-                  <Pie isAnimationActive={false} data={expenseRows} dataKey="amount" nameKey="label" innerRadius={55} outerRadius={90} paddingAngle={1}>
+                  <Pie isAnimationActive={!prefersReducedMotion()} data={expenseRows} dataKey="amount" nameKey="label" innerRadius={55} outerRadius={90} paddingAngle={1}>
                     {expenseRows.map((r, i) => <Cell key={r.key} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                   </Pie>
                   <Tooltip formatter={(v: number, n: string) => [`${fmtMoney(v)}${noInvoice ? '' : ` (${fmtPct((v / analysis.productInvoiceValue) * 100)} of invoice)`}`, n]} />

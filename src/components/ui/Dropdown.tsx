@@ -24,12 +24,12 @@ export function Dropdown({ trigger, items, align = 'right' }: { trigger: ReactNo
   const visible = items.filter((i) => !i.hidden);
   if (visible.length === 0) return null;
   return (
-    <div className="relative" ref={ref} onClick={(e) => e.stopPropagation()}>
+    <div className="relative" ref={ref} data-menu-open={open ? 'true' : undefined} onClick={(e) => e.stopPropagation()}>
       <div onClick={() => setOpen((o) => !o)}>{trigger}</div>
       {open && (
         <div
           className={cn(
-            'absolute z-40 mt-1 min-w-[190px] overflow-hidden rounded-lg border border-line bg-white py-1 shadow-pop animate-fadein dark:border-navy-700 dark:bg-navy-900',
+            'glass-strong animate-pop absolute z-40 mt-1 min-w-[190px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl py-1.5',
             align === 'right' ? 'right-0' : 'left-0',
           )}
         >
@@ -42,8 +42,8 @@ export function Dropdown({ trigger, items, align = 'right' }: { trigger: ReactNo
                 item.onClick();
               }}
               className={cn(
-                'flex w-full items-center gap-2 px-3 py-2 text-left text-sm disabled:opacity-40',
-                item.danger ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10' : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-navy-800',
+                'mx-1.5 flex w-[calc(100%-0.75rem)] items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition-colors disabled:opacity-40 sm:py-2',
+                item.danger ? 'text-red-700 hover:bg-red-500/10 dark:text-red-300' : 'text-slate-700 hover:bg-white/70 dark:text-slate-100 dark:hover:bg-white/10',
               )}
             >
               {item.icon}

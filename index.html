@@ -1,19 +1,22 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1b3a" />
     <meta name="description" content="Shipment Cost Control & Analysis — DIAMOND DENT TRADING CO." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <title>Shipment Cost Control & Analysis | DIAMOND DENT TRADING CO.</title>
     <script>
-      try { if (localStorage.getItem('dd-theme') === 'dark') document.documentElement.classList.add('dark'); } catch (e) {}
+      // Liquid Glass: dark navy is the default; a saved 'light' choice still wins.
+      try { if (localStorage.getItem('dd-theme') === 'light') document.documentElement.classList.remove('dark'); } catch (e) {}
     </script>
   </head>
-  <body class="bg-surface text-slate-800 antialiased dark:bg-navy-950 dark:text-slate-100">
+  <body class="antialiased">
+    <div class="lg-blobs" aria-hidden="true"><div class="lg-blob lg-b1"></div><div class="lg-blob lg-b2"></div><div class="lg-blob lg-b3"></div></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

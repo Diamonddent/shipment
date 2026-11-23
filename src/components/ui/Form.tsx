@@ -5,13 +5,13 @@ import { cn } from '@/lib/utils';
 const width = (className?: string) => (className && /(^|\s)(w-|max-w-|min-w-|flex-1)/.test(className) ? '' : 'w-full');
 
 const base =
-  'block rounded-lg border border-line bg-white px-3 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:bg-slate-50 disabled:text-slate-500 dark:border-navy-700 dark:bg-navy-950 dark:text-slate-100 dark:disabled:bg-navy-800';
+  'lg-field block min-w-0 rounded-xl px-3 text-sm text-slate-800 placeholder:text-slate-500 transition-[border-color,box-shadow] disabled:opacity-60 dark:text-slate-100 dark:placeholder:text-slate-400';
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }>(function Input(
   { className, invalid, ...rest },
   ref,
 ) {
-  return <input ref={ref} className={cn(base, width(className), 'h-9', invalid && 'border-red-400 focus:border-red-500 focus:ring-red-500/20', className)} {...rest} />;
+  return <input ref={ref} className={cn(base, width(className), 'h-10', invalid && '!border-red-400 focus:!border-red-500', className)} {...rest} />;
 });
 
 export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement> & { invalid?: boolean }>(function Select(
@@ -19,7 +19,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
   ref,
 ) {
   return (
-    <select ref={ref} className={cn(base, width(className), 'h-9 pr-8', invalid && 'border-red-400', className)} {...rest}>
+    <select ref={ref} className={cn(base, width(className), 'h-10 pr-8', invalid && '!border-red-400', className)} {...rest}>
       {children}
     </select>
   );
@@ -45,7 +45,7 @@ export function Field({
   className?: string;
 }) {
   return (
-    <label className={cn('block', className)}>
+    <label className={cn('block min-w-0', className)}>
       <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
         {label}
         {required && <span className="ml-0.5 text-red-500">*</span>}
@@ -66,7 +66,7 @@ export const Checkbox = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInp
 ) {
   return (
     <label className={cn('inline-flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200', className)}>
-      <input ref={ref} type="checkbox" className="h-4 w-4 rounded border-line text-accent focus:ring-accent/30" {...rest} />
+      <input ref={ref} type="checkbox" className="h-4 w-4 rounded border-line accent-[#4f7cff] text-accent focus:ring-accent/30" {...rest} />
       {label}
     </label>
   );
